@@ -1,0 +1,20 @@
+[env]
+"BBSPACK_EXE" = "external/bbspack/target/release/bbspack"
+"BBSSCRIPT_EXE" = "external/bbscript/target/release/bbscript"
+"U4PAK_EXE" = "external/u4pak/target/release/u4pak"
+"QUICKBMS_EXE" = "external/quickbms/quickbms_4gb_files"
+
+[tasks.build_external]
+script = [
+    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path external/bbscript/Cargo.toml",
+    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path external/bbspack/Cargo.toml",
+    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path external/u4pak/Cargo.toml",
+]
+
+[tasks.build]
+dependencies = ["build_external"]
+
+[tasks.run]
+dependencies = ["build_external"]
+command = "cargo"
+args = ["run"]

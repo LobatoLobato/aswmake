@@ -34,7 +34,7 @@ impl Loc {
         let move_loc_dict_path = bms_root_dir.join(Loc::MOVE_LOC_DICT_FILE);
         
         if bms_loc_file_path.exists() {
-            tools::bbspack(["extract", bms_loc_file_path.to_str().unwrap(), Loc::LOC_FILE])?;
+            tools::BBSPACK(&["extract", bms_loc_file_path.to_str().unwrap(), Loc::LOC_FILE])?;
             fs::remove_file(&bms_loc_file_path)?;
         }
         
