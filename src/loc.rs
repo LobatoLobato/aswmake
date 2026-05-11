@@ -4,6 +4,7 @@ use std::{collections::HashMap, fs, io::{BufRead, Write}, path::PathBuf, sync::L
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use crate::tools;
 
+#[derive(Debug)]
 pub struct Loc {
    move_loc_map: HashMap<String, String>
 }
@@ -89,27 +90,41 @@ impl Loc {
 }
 
 #[cfg(test)]
+use suitest::{suite, suite_cfg};
+
+#[cfg(test)]
+#[suite(loc_rs)]
+#[suite_cfg(sequential = true, verbose = true)]
 mod tests {
     use super::*;
-    use sequential_test::sequential;
-    use serde_json;
+    use std::sync::Arc;
+    use suitest::{before_all};
+    use tempfile;
     
-    static FIXTURES_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-        let path_str = std::env::var("FIXTURES_DIR").expect("Missing FIXTURES_DIR env var");
-        PathBuf::from(path_str)
-    });
-    static PAKCHUNK_PATH: LazyLock<PathBuf> = LazyLock::new(|| FIXTURES_DIR.join("pakchunk"));
-    static SHARED_LOC: LazyLock<Loc> = LazyLock::new(|| Loc::parse(&PAKCHUNK_PATH).expect("Error in Loc::parse"));
+    #[derive(Debug)]
+    struct Context {
+        loc_inst: Loc,
+        _fixtures_dir: tempfile::TempDir,
+        loc_file_path: PathBuf,
+        move_dict_file_path: PathBuf
+    }
+    
+    #[before_all]
+    fn setup() -> (Arc<Context>, ()){
+        let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures();
+        let pakchunk_dir_path =  tmp_fixtures_dir_path.join("pakchunk");
+        let loc = Loc::parse(&pakchunk_dir_path).unwrap();
         
-    #[test]
-    #[sequential]
-    fn parses_without_panicking() {
-        let _ = SHARED_LOC;
+        (Arc::new(Context { 
+            loc_inst: loc,
+            _fixtures_dir: tmp_fixtures_dir,
+            loc_file_path: pakchunk_dir_path.join(Loc::LOC_FILE),
+            move_dict_file_path: pakchunk_dir_path.join(Loc::MOVE_LOC_DICT_FILE)
+        }), ())
     }
     
     #[test]
-    #[sequential]
-    fn can_get_localized_move_by_bbs_id() {
+    fn can_get_localized_move_by_bbs_id(ctx: Arc<Context>) {
         let test_cases = [
             ("TCRAN_LandGuard", "Ground Block"),
             ("Kuebiko_A", "P Scarecrow"),
@@ -120,26 +135,23 @@ mod tests {
             ("ASK_ASKSpecial3_S_", "Recover Mana"),
         ];
         for (id, expected_name) in test_cases {
-            assert_eq!(SHARED_LOC.move_loc_get(id), Some(&String::from(expected_name)));
+            assert_eq!(ctx.loc_inst.move_loc_get(id), Some(&String::from(expected_name)));
         }
     }
     
     #[test]
-    #[sequential]
-    fn correctly_parses_locuexp_into_readable_format_and_into_json_dicts() {
-        let loc_fpath = PAKCHUNK_PATH.join(Loc::LOC_FILE);
-        let move_dict_fpath = PAKCHUNK_PATH.join(Loc::MOVE_LOC_DICT_FILE);
+    fn correctly_parses_locuexp_into_readable_format_and_into_json_dicts(ctx: Arc<Context>) {
+        assert!(fs::exists(&ctx.loc_file_path).unwrap());
+        assert!(fs::metadata(&ctx.loc_file_path).unwrap().len() > 0);
+        assert!(fs::exists(&ctx.move_dict_file_path).unwrap());
+        assert!(fs::metadata(&ctx.move_dict_file_path).unwrap().len() > 0);
         
-        assert!(fs::exists(&loc_fpath).unwrap());
-        assert!(fs::metadata(&loc_fpath).unwrap().len() > 0);
-        assert!(fs::exists(&move_dict_fpath).unwrap());
-        assert!(fs::metadata(&move_dict_fpath).unwrap().len() > 0);
-        
-        let move_dict_f = fs::read_to_string(&move_dict_fpath).unwrap();
+        let move_dict_f = fs::read_to_string(&ctx.move_dict_file_path).unwrap();
         let move_dict_j: serde_json::Value = serde_json::from_str(&move_dict_f).expect("Invalid JSON for move dict");
-        let move_map_j = serde_json::to_value(&SHARED_LOC.move_loc_map).unwrap();
+        let move_map_j = serde_json::to_value(&ctx.loc_inst.move_loc_map).unwrap();
         
         assert_eq!(move_dict_j.as_object().unwrap().len(), move_map_j.as_object().unwrap().len());
         assert_eq!(move_map_j, move_dict_j);
     }
+    
 }

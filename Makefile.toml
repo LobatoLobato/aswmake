@@ -36,4 +36,4 @@ description = "Guarantees the mocks exist before running the tests"
 dependencies = ["setup_fixtures", "build_external", "pack_pakchunk"]
 env = { "FIXTURES_DIR" = "${CARGO_MAKE_WORKING_DIRECTORY}/target/fixtures" }
 command = "cargo"
-args = ["test", "-p", "aswmake", "--", "--nocapture"]
+args = ["test", "-p", "aswmake", "--lib", "--", "--nocapture"]
