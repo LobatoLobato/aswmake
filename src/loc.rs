@@ -35,7 +35,7 @@ impl Loc {
         let move_loc_dict_path = bms_root_dir.join(Loc::MOVE_LOC_DICT_FILE);
         
         if bms_loc_file_path.exists() {
-            tools::BBSPACK(&["extract", bms_loc_file_path.to_str().unwrap(), loc_file_path.to_str().unwrap()])?;
+            tools::bbspack::extract(&bms_loc_file_path, &loc_file_path)?;
         }
         
         let mut move_dict = fs::File::create(move_loc_dict_path).unwrap();
@@ -94,7 +94,7 @@ use suitest::{suite, suite_cfg};
 
 #[cfg(test)]
 #[suite(loc_rs)]
-#[suite_cfg(sequential = true, verbose = true)]
+#[suite_cfg(sequential = true, verbose = false)]
 mod tests {
     use super::*;
     use std::sync::Arc;
@@ -111,15 +111,14 @@ mod tests {
     
     #[before_all]
     fn setup() -> (Arc<Context>, ()){
-        let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures();
-        let pakchunk_dir_path =  tmp_fixtures_dir_path.join("pakchunk");
-        let loc = Loc::parse(&pakchunk_dir_path).unwrap();
+        let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures(Some("loc"));
+        let loc = Loc::parse(&tmp_fixtures_dir_path).unwrap();
         
         (Arc::new(Context { 
             loc_inst: loc,
             _fixtures_dir: tmp_fixtures_dir,
-            loc_file_path: pakchunk_dir_path.join(Loc::LOC_FILE),
-            move_dict_file_path: pakchunk_dir_path.join(Loc::MOVE_LOC_DICT_FILE)
+            loc_file_path: tmp_fixtures_dir_path.join(Loc::LOC_FILE),
+            move_dict_file_path: tmp_fixtures_dir_path.join(Loc::MOVE_LOC_DICT_FILE)
         }), ())
     }
     

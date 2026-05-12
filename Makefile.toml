@@ -1,27 +1,9 @@
-[env]
-"BBSPACK_EXE" = "external/bbspack/target/release/bbspack"
-"BBSSCRIPT_EXE" = "external/bbscript/target/release/bbscript"
-"U4PAK_EXE" = "external/u4pak/target/release/u4pak"
-"QUICKBMS_EXE" = "external/quickbms/quickbms_4gb_files"
-
 [tasks.build_external]
 script = [
     "RUSTFLAGS='-A warnings' cargo build --release --manifest-path external/bbscript/Cargo.toml",
     "RUSTFLAGS='-A warnings' cargo build --release --manifest-path external/bbspack/Cargo.toml",
     "RUSTFLAGS='-A warnings' cargo build --release --manifest-path external/u4pak/Cargo.toml",
 ]
-
-[tasks.setup_fixtures]
-script = [
-    "mkdir -p target/fixtures",
-    "cp -r tests/fixtures/. target/fixtures/"
-]
-
-[tasks.pack_pakchunk]
-description = "Generates mock package from the assets in mock/"
-dependencies = ["build_external", "setup_fixtures"]
-command = "${U4PAK_EXE}"
-args = ["pack", "target/fixtures/pakchunk.pak", ":none,rename=/RED:tests/fixtures/pakchunk/RED", "--mount-point=../../..", "--version=3"]
 
 [tasks.build]
 dependencies = ["build_external"]
@@ -33,7 +15,7 @@ args = ["run"]
 
 [tasks.test]
 description = "Guarantees the mocks exist before running the tests"
-dependencies = ["setup_fixtures", "build_external", "pack_pakchunk"]
+dependencies = ["build_external"]
 env = { "FIXTURES_DIR" = "${CARGO_MAKE_WORKING_DIRECTORY}/target/fixtures" }
 command = "cargo"
 args = ["test", "-p", "aswmake", "--lib", "--", "--nocapture"]

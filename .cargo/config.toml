@@ -1,6 +1,8 @@
 [env]
 BBSPACK_EXE = "external/bbspack/target/release/bbspack"
 BBSCRIPT_EXE = "external/bbscript/target/release/bbscript"
+BBSCRIPT_DB = "external/bbscript/static_db"
 U4PAK_EXE = "external/u4pak/target/release/u4pak"
 QUICKBMS_EXE = "external/quickbms/quickbms_4gb_files"
+QUICKBMS_SCRIPT = "external/quickbms/ggst.bms"
 FIXTURES_DIR = "target/fixtures"
