@@ -19,6 +19,15 @@ pub fn sha1_hash(path: impl AsRef<Path>) -> std::io::Result<String> {
     Ok(hash.iter().map(|b| format!("{:02x}", b)).collect())
 }
 
+macro_rules! make {
+    ($type:ident { $($field:ident : $val:expr),* $(,)? }) => {
+            $type {
+                $($field: $val,)*
+                ..Default::default()
+            }
+        };
+}
+pub(crate) use make;
 
 #[cfg(test)]
 use suitest::{suite, suite_cfg};
