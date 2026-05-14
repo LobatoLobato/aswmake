@@ -1,16 +1,20 @@
-use regex::Regex;
-use std::{collections::HashMap, fs, io::{BufRead}, path::{PathBuf}, sync::LazyLock};
+use lazy_regex::*;
+use std::{collections::HashMap, fs, io::{BufRead}, path::{PathBuf}};
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use crate::{path::{OptionalPath, Path}, tools};
+
+use super::error;
 
 #[derive(Debug)]
 pub struct Loc {
    move_loc_map: HashMap<String, String>
 }
 
-static RE_CMCR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"CMCR_(\w+)").unwrap());
-static RE_SUB_NAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\^m((Atk)|(Btn)))|;").unwrap());
-static RE_HOLD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(.+\s*)\(Hold\)").unwrap());
+impl super::Parser for Loc {
+    fn bms_filter() -> &'static str {
+        return "{}/Localization/INT/REDGame.uexp";
+    }
+}
 
 impl Loc {
     fn utf16le_file_reader(path: &PathBuf) -> std::io::BufReader<encoding_rs_io::DecodeReaderBytes<fs::File, Vec<u8>>> {
@@ -22,14 +26,10 @@ impl Loc {
         std::io::BufReader::new(decoder)
     }
     
-    pub fn parse(loc_uexp_path: impl Path, out_dir: impl OptionalPath) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn parse(loc_uexp_path: impl Path, out_dir: impl OptionalPath) -> anyhow::Result<Self> {
         let loc_uexp_path = loc_uexp_path.as_path();
         let out_dir = out_dir.as_path().or(loc_uexp_path.parent()).unwrap();
-        let Some(loc_file_name) = loc_uexp_path.file_name() else {
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, 
-                format!("loc_uexp_path({}) is not a valid file path", loc_uexp_path.display())
-            )));
-        };
+        let loc_file_name = loc_uexp_path.file_name().ok_or(error::InvalidFilePath(loc_uexp_path))?;
         let loc_file_path = out_dir.join(loc_file_name).with_extension("loc");
         
         
@@ -43,17 +43,19 @@ impl Loc {
         let mut loc_inst = Self { move_loc_map: HashMap::new() };
         
         while let Some(Ok(line)) = loc_it.next() {
-            let Some(caps) = RE_CMCR.captures(&line) else { continue; };
+            let Some(caps) = regex_captures!(r"CMCR_(\w+)", &line) else { continue; };
             let Some(Ok(next_line)) = loc_it.next() else { continue; };
             
-            let mut move_cmcr = caps[1].to_string();
+            let mut move_cmcr = caps.1.to_string();
             if loc_inst.move_loc_map.contains_key(&move_cmcr) {
                 move_cmcr = format!("{move_cmcr}_");
             }
             
-            let mut move_name = RE_SUB_NAME.replace_all(next_line.trim(), "").into_owned();
+            let mut move_name = regex_remove_all!(r"(\^m((Atk)|(Btn)))|;", next_line.trim()).into_owned();
             while move_name.contains("(Hold)") {
-                move_name = RE_HOLD.replace_all(&move_name, |m: &regex::Captures| { format!("[{}]", m[1].trim()) }).into_owned();
+                move_name = regex_replace_all!(r"(.+\s*)\(Hold\)", &move_name, |_, m: &str| { format
+                    !("[{}]", m.trim()) 
+                }).into_owned();
             }
 
             loc_inst.move_loc_map.insert(move_cmcr, move_name.replace('"', ""));
@@ -75,12 +77,12 @@ impl Loc {
 
         return None
     }
-    pub fn bms_filter() -> &'static str {
-        return "{}/Localization/INT/REDGame.uexp";
+    pub fn move_loc_get_owned(&self, key: &str) -> Option<String> {
+        self.move_loc_get(key).map(String::to_owned)
     }
 }
 
-pub fn parse(loc_uexp_path: impl Path, out_dir: impl OptionalPath) -> Result<Loc, Box<dyn std::error::Error>> {
+pub fn parse(loc_uexp_path: impl Path, out_dir: impl OptionalPath) -> anyhow::Result<Loc> {
     return Loc::parse(loc_uexp_path, out_dir);
 }
 
@@ -102,7 +104,8 @@ mod tests {
     struct Context {
         loc_inst: Loc,
         _fixtures_dir: tempfile::TempDir,
-        loc_file_path: PathBuf,
+        loc_file_path_no_out_dir: PathBuf,
+        loc_file_path_out_dir: PathBuf,
         ref_loc_file_path: PathBuf
     }
     
@@ -110,12 +113,15 @@ mod tests {
     fn setup() -> (Arc<Context>, ()){
         let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures(Some("loc"));
         let out_dir = tmp_fixtures_dir_path.join("output");
-        let loc = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), &out_dir).unwrap();
+        
+        let _loc_no_out_dir = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), None).unwrap();
+        let loc_out_dir = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), &out_dir).unwrap();        
         
         (Arc::new(Context { 
-            loc_inst: loc,
+            loc_inst: loc_out_dir,
             _fixtures_dir: tmp_fixtures_dir,
-            loc_file_path: out_dir.join("REDGame.loc"),
+            loc_file_path_no_out_dir: out_dir.join("REDGame.loc"),
+            loc_file_path_out_dir: out_dir.join("REDGame.loc"),
             ref_loc_file_path: tmp_fixtures_dir_path.join("REDGame.ref.loc")
         }), ())
     }
@@ -138,10 +144,13 @@ mod tests {
     
     #[test]
     fn correctly_parses_locuexp_into_readable_format_and_into_json_dicts(ctx: Arc<Context>) {
-        assert!(fs::exists(&ctx.loc_file_path).unwrap());
-        assert!(fs::metadata(&ctx.loc_file_path).unwrap().len() > 0);
+        assert!(fs::exists(&ctx.loc_file_path_no_out_dir).unwrap());
+        assert!(fs::metadata(&ctx.loc_file_path_no_out_dir).unwrap().len() > 0);
+        assert_eq!(sha1_hash(&ctx.loc_file_path_no_out_dir).ok(), sha1_hash(&ctx.ref_loc_file_path).ok());
         
-        assert_eq!(sha1_hash(&ctx.loc_file_path).ok(), sha1_hash(&ctx.ref_loc_file_path).ok());
+        assert!(fs::exists(&ctx.loc_file_path_out_dir).unwrap());
+        assert!(fs::metadata(&ctx.loc_file_path_out_dir).unwrap().len() > 0);
+        assert_eq!(sha1_hash(&ctx.loc_file_path_out_dir).ok(), sha1_hash(&ctx.ref_loc_file_path).ok());
     }
     
 }
