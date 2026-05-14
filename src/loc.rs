@@ -1,6 +1,5 @@
-use const_format::concatcp;
 use regex::Regex;
-use std::{collections::HashMap, fs, io::{BufRead, Write}, path::PathBuf, sync::LazyLock};
+use std::{collections::HashMap, fs, io::{BufRead, Write}, path::{Path, PathBuf}, sync::LazyLock};
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use crate::tools;
 
@@ -14,12 +13,6 @@ static RE_SUB_NAME: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\^m((Atk)|(
 static RE_HOLD: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(.+\s*)\(Hold\)").unwrap());
 
 impl Loc {
-    const LOC_DIR: &str = "RED/Content/Localization/INT";
-    const LOC_FILE: &str = concatcp!(Loc::LOC_DIR, "/REDGame.loc");
-    const BMS_LOC_FILE: &str = concatcp!(Loc::LOC_DIR, "/REDGame.uexp");
-    const MOVE_LOC_DICT_FILE: &str = concatcp!(Loc::LOC_DIR, "/moves.loc.json");
-    
-    
     fn utf16le_file_reader(path: &PathBuf) -> std::io::BufReader<encoding_rs_io::DecodeReaderBytes<fs::File, Vec<u8>>> {
         let loc_f = fs::File::open(path).unwrap();
         let decoder = DecodeReaderBytesBuilder::new()
@@ -29,13 +22,23 @@ impl Loc {
         std::io::BufReader::new(decoder)
     }
     
-    pub fn parse(bms_root_dir: &PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
-        let bms_loc_file_path = bms_root_dir.join(Loc::BMS_LOC_FILE);
-        let loc_file_path = bms_root_dir.join(Loc::LOC_FILE);
-        let move_loc_dict_path = bms_root_dir.join(Loc::MOVE_LOC_DICT_FILE);
+    pub fn parse(loc_uexp_path: impl AsRef<Path>, out_dir: Option<impl AsRef<Path>>) -> Result<Self, Box<dyn std::error::Error>> {
+        let loc_uexp_path = loc_uexp_path.as_ref().to_path_buf();
+        let out_dir = out_dir.map(|d| d.as_ref().to_path_buf())
+            .unwrap_or(loc_uexp_path.parent().unwrap().to_path_buf());
+        let Some(loc_file_name) = loc_uexp_path.file_name() else {
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, 
+                format!("loc_uexp_path({}) is not a valid file path", loc_uexp_path.display())
+            )));
+        };
+        let loc_file_path = out_dir.join(loc_file_name).with_extension("loc");
+        let move_loc_dict_path = out_dir.join(loc_file_name).with_extension("moves.loc.json");
         
-        if bms_loc_file_path.exists() {
-            tools::bbspack::extract(&bms_loc_file_path, &loc_file_path)?;
+        
+        std::fs::create_dir_all(&out_dir).unwrap();
+        
+        if loc_uexp_path.exists() {
+            tools::bbspack::extract(&loc_uexp_path, &loc_file_path)?;
         }
         
         let mut move_dict = fs::File::create(move_loc_dict_path).unwrap();
@@ -89,6 +92,10 @@ impl Loc {
     }
 }
 
+pub fn parse(loc_uexp_path: impl AsRef<Path>, out_dir: Option<impl AsRef<Path>>) -> Result<Loc, Box<dyn std::error::Error>> {
+    return Loc::parse(loc_uexp_path, out_dir);
+}
+
 #[cfg(test)]
 use suitest::{suite, suite_cfg};
 
@@ -112,13 +119,14 @@ mod tests {
     #[before_all]
     fn setup() -> (Arc<Context>, ()){
         let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures(Some("loc"));
-        let loc = Loc::parse(&tmp_fixtures_dir_path).unwrap();
+        let out_dir = tmp_fixtures_dir_path.join("output");
+        let loc = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), Some(&out_dir)).unwrap();
         
         (Arc::new(Context { 
             loc_inst: loc,
             _fixtures_dir: tmp_fixtures_dir,
-            loc_file_path: tmp_fixtures_dir_path.join(Loc::LOC_FILE),
-            move_dict_file_path: tmp_fixtures_dir_path.join(Loc::MOVE_LOC_DICT_FILE)
+            loc_file_path: out_dir.join("REDGame.loc"),
+            move_dict_file_path: out_dir.join("REDGame.moves.loc.json")
         }), ())
     }
     
