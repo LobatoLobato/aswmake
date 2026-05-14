@@ -1,5 +1,5 @@
 use std::sync::LazyLock;
-
+use crate::path::Path;
 use super::*;
 
 declare_tool!(QUICKBMS);
@@ -13,9 +13,9 @@ static BMS_SCRIPT: LazyLock<tempfile::NamedTempFile> = LazyLock::new(|| {
 });
 
 
-pub fn extract(pak_path: impl AsRef<Path>, out_dir: impl AsRef<Path>, filters: Option<&[&str]>) -> ToolResult {
+pub fn extract(pak_path: impl Path, out_dir: impl Path, filters: Option<&[&str]>) -> ToolResult {
     let filters = filters.map(|f| format!("-f \"{}\"", f.join(";"))).unwrap_or(String::new());
-    QUICKBMS!("-o", "-Y", filters, BMS_SCRIPT.path(), pak_path, out_dir)
+    QUICKBMS!("-o", "-Y", filters, BMS_SCRIPT.path(), pak_path.as_path(), out_dir.as_path())
 }
 
 

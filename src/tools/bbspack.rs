@@ -1,13 +1,14 @@
 use super::*;
+use crate::path::Path;
 
 declare_tool!(BBSPACK);
 
-pub fn extract(uexp: impl AsRef<Path>, out_file: impl AsRef<Path>) -> ToolResult {
-    BBSPACK!("extract", uexp, out_file)
+pub fn extract(uexp: impl Path, out_file: impl Path) -> ToolResult {
+    BBSPACK!("extract", uexp.as_path(), out_file.as_path())
 }
 
-pub fn inject(input_file: impl AsRef<Path>, uexp: impl AsRef<Path>, uasset: impl AsRef<Path>) -> ToolResult {
-    BBSPACK!("inject", input_file, uexp, uasset)
+pub fn inject(input_file: impl Path, uexp: impl Path, uasset: impl Path) -> ToolResult {
+    BBSPACK!("inject", input_file.as_path(), uexp.as_path(), uasset.as_path())
 }
 
 

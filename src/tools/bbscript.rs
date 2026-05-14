@@ -1,3 +1,5 @@
+use crate::path::Path;
+
 use super::*;
 
 declare_tool!(BBSCRIPT);
@@ -19,12 +21,12 @@ impl TargetGame {
     }
 }
 
-pub fn parse(bbscript_bin_path: impl AsRef<Path>, out_file: impl AsRef<Path>, game: TargetGame) -> ToolResult {
-    BBSCRIPT!("parse", "--overwrite", "--game", game.lcname(), bbscript_bin_path, out_file)
+pub fn parse(bbscript_bin_path: impl Path, out_file: impl Path, game: TargetGame) -> ToolResult {
+    BBSCRIPT!("parse", "--overwrite", "--game", game.lcname(), bbscript_bin_path.as_path(), out_file.as_path())
 }
 
-pub fn rebuild(input_file: impl AsRef<Path>, out_bbscript_bin_path: impl AsRef<Path>, game: TargetGame) -> ToolResult {
-    BBSCRIPT!("rebuild", "-o", "--game", game.lcname(), input_file, out_bbscript_bin_path)
+pub fn rebuild(input_file: impl Path, out_bbscript_bin_path: impl Path, game: TargetGame) -> ToolResult {
+    BBSCRIPT!("rebuild", "-o", "--game", game.lcname(), input_file.as_path(), out_bbscript_bin_path.as_path())
 }
 
 

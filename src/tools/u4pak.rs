@@ -1,22 +1,24 @@
-use walkdir::{ WalkDir};
+use walkdir::{WalkDir};
+
+use crate::path::Path;
 
 use super::*;
 
 declare_tool!(U4PAK);
 
 
-pub fn pack<D: AsRef<Path>, R: AsRef<Path>>(dest_pak_path: D, root_path: R) -> ToolResult {
-    let result = U4PAK!("pack", &dest_pak_path, 
-        format!(":none,rename=/RED:{}/RED", root_path.as_ref().display()), 
+pub fn pack(dest_pak_path: impl Path, root_path: impl Path) -> ToolResult {
+    let result = U4PAK!("pack", &dest_pak_path.as_path(), 
+        format!(":none,rename=/RED:{}/RED", root_path.as_path().display()), 
         "--mount-point=../../..", 
         "--version=3"
     )?;
     
-    if !validate(&dest_pak_path, &root_path) {
+    if !validate(&dest_pak_path.as_path(), &root_path.as_path()) {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, 
             format!("{}'s content does not match {}'s content", 
-                dest_pak_path.as_ref().display(), 
-                root_path.as_ref().display()
+                dest_pak_path.as_path().display(), 
+                root_path.as_path().display()
             )
         ));
     }
@@ -24,14 +26,14 @@ pub fn pack<D: AsRef<Path>, R: AsRef<Path>>(dest_pak_path: D, root_path: R) -> T
     Ok(result)
 }
 
-pub fn unpack<P: AsRef<Path>, O: AsRef<Path>>(pak_path: P, out_dir: O) -> ToolResult {
-    let result = U4PAK!("unpack", pak_path, "--outdir", out_dir)?;
+pub fn unpack(pak_path: impl Path, out_dir: impl Path) -> ToolResult {
+    let result = U4PAK!("unpack", pak_path.as_path(), "--outdir", out_dir.as_path())?;
     
-    if !validate(&pak_path, &out_dir) {
+    if !validate(&pak_path.as_path(), &out_dir.as_path()) {
         return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, 
             format!("{}'s content does not match {}'s content", 
-                out_dir.as_ref().display(), 
-                pak_path.as_ref().display()
+                out_dir.as_path().display(), 
+                pak_path.as_path().display()
             )
         ));
     }
@@ -39,16 +41,16 @@ pub fn unpack<P: AsRef<Path>, O: AsRef<Path>>(pak_path: P, out_dir: O) -> ToolRe
     Ok(result)
 }
 
-pub fn check<P: AsRef<Path>>(path: P) -> bool {
-    if let Ok(output) = U4PAK!("check", path) {
+pub fn check(path: impl Path) -> bool {
+    if let Ok(output) = U4PAK!("check", path.as_path()) {
         output == "All ok"
     } else {
         false
     }
 }
 
-pub fn list<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<(String, PathBuf)>> {
-    let cmd_result = U4PAK!("list", path)?;
+pub fn list(path: impl Path) -> std::io::Result<Vec<(String, PathBuf)>> {
+    let cmd_result = U4PAK!("list", path.as_path())?;
     
     let mut list = vec![];
     let mut it = cmd_result.split_whitespace().peekable();
@@ -63,13 +65,13 @@ pub fn list<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<(String, PathBuf)>> 
     Ok(list)
 }
 
-pub fn validate<P: AsRef<Path>, D: AsRef<Path>>(pak_path: P, dir_path: D) -> bool {
-    if let Ok(mut pak_list) = list(&pak_path) && check(&pak_path) {
-        let mut dir_files: Vec<(String, PathBuf)> = WalkDir::new(&dir_path).into_iter()
+pub fn validate(pak_path: impl Path, dir_path: impl Path) -> bool {
+    if let Ok(mut pak_list) = list(&pak_path.as_path()) && check(&pak_path.as_path()) {
+        let mut dir_files: Vec<(String, PathBuf)> = WalkDir::new(&dir_path.as_path()).into_iter()
             .filter_map(|e| e.ok().take_if(|e| e.file_type().is_file()))
             .map(|e| {
                 let full_path = e.into_path();
-                let rel_path = full_path.strip_prefix(&dir_path).unwrap().to_path_buf();
+                let rel_path = full_path.strip_prefix(&dir_path.as_path()).unwrap().to_path_buf();
                 let hash = crate::util::sha1_hash(full_path).unwrap();
                 
                 (hash, rel_path)

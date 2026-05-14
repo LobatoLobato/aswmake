@@ -1,10 +1,10 @@
-use std::path::Path;
+use crate::path::Path;
 
 
-pub fn sha1_hash(path: impl AsRef<Path>) -> std::io::Result<String> {
+pub fn sha1_hash(path: impl Path) -> std::io::Result<String> {
     use sha1::{Sha1, Digest};
     use std::io::Read;
-    let mut file = std::fs::File::open(path)?;
+    let mut file = std::fs::File::open(path.as_path())?;
     let mut hasher = Sha1::new();
     let mut buffer = [0u8; 8192];
     

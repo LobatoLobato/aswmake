@@ -51,7 +51,7 @@ impl Loc {
                 move_cmcr = format!("{move_cmcr}_");
             }
             
-            let mut move_name = regex_remove_all!(r"(\^m((Atk)|(Btn)))|;", next_line.trim()).into_owned();
+            let mut move_name = regex_replace_all!(r"(\^m((Atk)|(Btn)))|;", next_line.trim(), "").into_owned();
             while move_name.contains("(Hold)") {
                 move_name = regex_replace_all!(r"(.+\s*)\(Hold\)", &move_name, |_, m: &str| { format
                     !("[{}]", m.trim()) 
