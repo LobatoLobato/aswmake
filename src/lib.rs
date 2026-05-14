@@ -1,6 +1,8 @@
+#![feature(auto_traits, negative_impls)]
 pub mod tools;
 pub mod loc;
 pub mod util;
+pub mod path;
 
 #[cfg(test)]
 pub mod tests {

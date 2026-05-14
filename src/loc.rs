@@ -1,7 +1,7 @@
 use regex::Regex;
-use std::{collections::HashMap, fs, io::{BufRead}, path::{Path, PathBuf}, sync::LazyLock};
+use std::{collections::HashMap, fs, io::{BufRead}, path::{PathBuf}, sync::LazyLock};
 use encoding_rs_io::DecodeReaderBytesBuilder;
-use crate::tools;
+use crate::{path::{OptionalPath, Path}, tools};
 
 #[derive(Debug)]
 pub struct Loc {
@@ -22,10 +22,9 @@ impl Loc {
         std::io::BufReader::new(decoder)
     }
     
-    pub fn parse(loc_uexp_path: impl AsRef<Path>, out_dir: Option<impl AsRef<Path>>) -> Result<Self, Box<dyn std::error::Error>> {
-        let loc_uexp_path = loc_uexp_path.as_ref().to_path_buf();
-        let out_dir = out_dir.map(|d| d.as_ref().to_path_buf())
-            .unwrap_or(loc_uexp_path.parent().unwrap().to_path_buf());
+    pub fn parse(loc_uexp_path: impl Path, out_dir: impl OptionalPath) -> Result<Self, Box<dyn std::error::Error>> {
+        let loc_uexp_path = loc_uexp_path.as_path();
+        let out_dir = out_dir.as_path().or(loc_uexp_path.parent()).unwrap();
         let Some(loc_file_name) = loc_uexp_path.file_name() else {
             return Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, 
                 format!("loc_uexp_path({}) is not a valid file path", loc_uexp_path.display())
@@ -81,7 +80,7 @@ impl Loc {
     }
 }
 
-pub fn parse(loc_uexp_path: impl AsRef<Path>, out_dir: Option<impl AsRef<Path>>) -> Result<Loc, Box<dyn std::error::Error>> {
+pub fn parse(loc_uexp_path: impl Path, out_dir: impl OptionalPath) -> Result<Loc, Box<dyn std::error::Error>> {
     return Loc::parse(loc_uexp_path, out_dir);
 }
 
@@ -111,7 +110,7 @@ mod tests {
     fn setup() -> (Arc<Context>, ()){
         let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures(Some("loc"));
         let out_dir = tmp_fixtures_dir_path.join("output");
-        let loc = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), Some(&out_dir)).unwrap();
+        let loc = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), &out_dir).unwrap();
         
         (Arc::new(Context { 
             loc_inst: loc,
