@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::{collections::HashMap, fs, io::{BufRead, Write}, path::{Path, PathBuf}, sync::LazyLock};
+use std::{collections::HashMap, fs, io::{BufRead}, path::{Path, PathBuf}, sync::LazyLock};
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use crate::tools;
 
@@ -32,7 +32,6 @@ impl Loc {
             )));
         };
         let loc_file_path = out_dir.join(loc_file_name).with_extension("loc");
-        let move_loc_dict_path = out_dir.join(loc_file_name).with_extension("moves.loc.json");
         
         
         std::fs::create_dir_all(&out_dir).unwrap();
@@ -41,17 +40,12 @@ impl Loc {
             tools::bbspack::extract(&loc_uexp_path, &loc_file_path)?;
         }
         
-        let mut move_dict = fs::File::create(move_loc_dict_path).unwrap();
-        let mut first_move = true;
         let mut loc_it = Loc::utf16le_file_reader(&loc_file_path).lines();
         let mut loc_inst = Self { move_loc_map: HashMap::new() };
         
-        write!(move_dict, "{{\n")?;
         while let Some(Ok(line)) = loc_it.next() {
             let Some(caps) = RE_CMCR.captures(&line) else { continue; };
             let Some(Ok(next_line)) = loc_it.next() else { continue; };
-            
-            if !first_move { write!(move_dict, ",\n")?; }
             
             let mut move_cmcr = caps[1].to_string();
             if loc_inst.move_loc_map.contains_key(&move_cmcr) {
@@ -62,15 +56,10 @@ impl Loc {
             while move_name.contains("(Hold)") {
                 move_name = RE_HOLD.replace_all(&move_name, |m: &regex::Captures| { format!("[{}]", m[1].trim()) }).into_owned();
             }
-            move_name = move_name.replace('"', "");
-            
-            let json_move_name = serde_json::to_string(&move_name).unwrap();
-            write!(move_dict, "  \"{}\": {}", move_cmcr, json_move_name)?;
-            loc_inst.move_loc_map.insert(move_cmcr, json_move_name.replace('"', ""));
-            
-            first_move = false;
+
+            loc_inst.move_loc_map.insert(move_cmcr, move_name.replace('"', ""));
         }
-        write!(move_dict, "\n}}")?;
+        
         Ok(loc_inst)
     }
     pub fn move_loc_get(&self, key: &str) -> Option<&String> {
@@ -103,6 +92,8 @@ use suitest::{suite, suite_cfg};
 #[suite(loc_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
+    use crate::util::sha1_hash;
+
     use super::*;
     use std::sync::Arc;
     use suitest::{before_all};
@@ -113,7 +104,7 @@ mod tests {
         loc_inst: Loc,
         _fixtures_dir: tempfile::TempDir,
         loc_file_path: PathBuf,
-        move_dict_file_path: PathBuf
+        ref_loc_file_path: PathBuf
     }
     
     #[before_all]
@@ -126,7 +117,7 @@ mod tests {
             loc_inst: loc,
             _fixtures_dir: tmp_fixtures_dir,
             loc_file_path: out_dir.join("REDGame.loc"),
-            move_dict_file_path: out_dir.join("REDGame.moves.loc.json")
+            ref_loc_file_path: tmp_fixtures_dir_path.join("REDGame.ref.loc")
         }), ())
     }
     
@@ -150,15 +141,8 @@ mod tests {
     fn correctly_parses_locuexp_into_readable_format_and_into_json_dicts(ctx: Arc<Context>) {
         assert!(fs::exists(&ctx.loc_file_path).unwrap());
         assert!(fs::metadata(&ctx.loc_file_path).unwrap().len() > 0);
-        assert!(fs::exists(&ctx.move_dict_file_path).unwrap());
-        assert!(fs::metadata(&ctx.move_dict_file_path).unwrap().len() > 0);
         
-        let move_dict_f = fs::read_to_string(&ctx.move_dict_file_path).unwrap();
-        let move_dict_j: serde_json::Value = serde_json::from_str(&move_dict_f).expect("Invalid JSON for move dict");
-        let move_map_j = serde_json::to_value(&ctx.loc_inst.move_loc_map).unwrap();
-        
-        assert_eq!(move_dict_j.as_object().unwrap().len(), move_map_j.as_object().unwrap().len());
-        assert_eq!(move_map_j, move_dict_j);
+        assert_eq!(sha1_hash(&ctx.loc_file_path).ok(), sha1_hash(&ctx.ref_loc_file_path).ok());
     }
     
 }
