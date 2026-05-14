@@ -9,24 +9,22 @@ fn decide_platform(command_str_no_ext: &PathBuf) -> Command {
     return Command::new(command_str_no_ext);
 }
 
-fn check_err(cmd_output: std::io::Result<Output>) -> std::io::Result<String> {
+fn check_err(cmd_output: std::io::Result<Output>) -> anyhow::Result<String> {
     if let Ok(mut output) = cmd_output {
         output.stdout.extend_from_slice(&output.stderr);
         let cmd_out = String::from_utf8_lossy(&output.stdout);
     
-        if cmd_out.contains("No such file or directory") { 
-            return Err(std::io::Error::new(std::io::ErrorKind::NotFound, cmd_out));
-        } else if let Some(code) = output.status.code() && code != 0 {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other, cmd_out));
+        if let Some(code) = output.status.code() && code != 0 {
+            return Err(anyhow::Error::msg(cmd_out.into_owned()));
         }
         
         return Ok(cmd_out.trim().to_string());
     }
     
-    Err(cmd_output.err().unwrap())
+    Err(cmd_output.err().map(|e| anyhow::Error::msg(e.to_string())).unwrap())
 }
 
-type ToolResult = std::io::Result<String>;
+type ToolResult = anyhow::Result<String>;
 macro_rules! declare_tool {
     ($name:ident) => {
         paste::paste! {

@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use lazy_regex::*;
 
-use crate::parsers::error;
+use crate::error;
 use crate::{tools, util};
 use crate::path::{Path, OptionalPath};
 use crate::parsers::loc::Loc;

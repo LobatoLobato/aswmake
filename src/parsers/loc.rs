@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs, io::{BufRead}, path::{PathBuf}};
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use crate::{path::{OptionalPath, Path}, tools};
 
-use super::error;
+use crate::error;
 
 #[derive(Debug)]
 pub struct Loc {

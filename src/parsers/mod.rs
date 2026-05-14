@@ -1,4 +1,3 @@
-pub mod error;
 pub mod loc;
 pub mod bbs;
 

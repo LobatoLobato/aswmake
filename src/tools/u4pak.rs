@@ -15,8 +15,7 @@ pub fn pack(dest_pak_path: impl Path, root_path: impl Path) -> ToolResult {
     )?;
     
     if !validate(&dest_pak_path.as_path(), &root_path.as_path()) {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, 
-            format!("{}'s content does not match {}'s content", 
+        return Err(anyhow::Error::msg(format!("{}'s content does not match {}'s content", 
                 dest_pak_path.as_path().display(), 
                 root_path.as_path().display()
             )
@@ -30,8 +29,7 @@ pub fn unpack(pak_path: impl Path, out_dir: impl Path) -> ToolResult {
     let result = U4PAK!("unpack", pak_path.as_path(), "--outdir", out_dir.as_path())?;
     
     if !validate(&pak_path.as_path(), &out_dir.as_path()) {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, 
-            format!("{}'s content does not match {}'s content", 
+        return Err(anyhow::Error::msg(format!("{}'s content does not match {}'s content", 
                 out_dir.as_path().display(), 
                 pak_path.as_path().display()
             )
@@ -49,7 +47,7 @@ pub fn check(path: impl Path) -> bool {
     }
 }
 
-pub fn list(path: impl Path) -> std::io::Result<Vec<(String, PathBuf)>> {
+pub fn list(path: impl Path) -> anyhow::Result<Vec<(String, PathBuf)>> {
     let cmd_result = U4PAK!("list", path.as_path())?;
     
     let mut list = vec![];
