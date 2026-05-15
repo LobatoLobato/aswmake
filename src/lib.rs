@@ -3,6 +3,7 @@ pub mod tools;
 pub mod parsers;
 pub mod util;
 pub mod path;
+pub mod build;
 pub mod error;
 
 #[cfg(test)]

@@ -120,7 +120,7 @@ mod tests {
         (Arc::new(Context { 
             loc_inst: loc_out_dir,
             _fixtures_dir: tmp_fixtures_dir,
-            loc_file_path_no_out_dir: out_dir.join("REDGame.loc"),
+            loc_file_path_no_out_dir: tmp_fixtures_dir_path.join("REDGame.loc"),
             loc_file_path_out_dir: out_dir.join("REDGame.loc"),
             ref_loc_file_path: tmp_fixtures_dir_path.join("REDGame.ref.loc")
         }), ())
