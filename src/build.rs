@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::path::{OptionalPath, Path};
+use crate::path::Path;
 use crate::tools::{bbscript, bbspack, u4pak};
 
 pub enum FileKind {
@@ -14,7 +14,7 @@ pub fn compile(
     uasset_path: impl Path, 
     out_dir: impl Path,
     file_kind: FileKind,
-    print_fn: Option<fn(&str, Option<&str>)>
+    hook_fn: Option<fn(&str, Option<&str>)>
 ) -> anyhow::Result<(String, String)> {
     let input_path = input_path.absolute_file()?;
     let uexp_path = uexp_path.absolute_file()?; 
@@ -35,7 +35,7 @@ pub fn compile(
     let file_name = input_path.file_name().unwrap().to_string_lossy().into_owned();
     let output_path = out_dir.join(&file_name);
     
-    print_fn.iter().for_each(|f| f(&file_name, None));
+    hook_fn.iter().for_each(|f| f(&file_name, None));
     let r = match file_kind {
         FileKind::BBSCRIPT => {
             let rebuild_path = output_path.with_extension("bbscript");
@@ -46,7 +46,7 @@ pub fn compile(
         },
         FileKind::PAC => bbspack::inject(input_path, out_uexp_path, out_uasset_path)
     }?;
-    print_fn.iter().for_each(|f| f(&file_name, Some(&r)));
+    hook_fn.iter().for_each(|f| f(&file_name, Some(&r)));
     
     Ok((file_name, r))
 }
@@ -55,7 +55,7 @@ pub fn compile_against_bms(
     input_dir: impl Path, 
     bms_dir: impl Path, 
     out_dir: impl Path,
-    print_fn: Option<fn(&str, Option<&str>)>
+    hook_fn: Option<fn(&str, Option<&str>)>
 ) -> anyhow::Result<Vec<(String, String)>> {
     let input_dir = input_dir.absolute_dir()?;
     let bms_dir = bms_dir.absolute_dir()?;
@@ -86,7 +86,7 @@ pub fn compile_against_bms(
             let out_dir = out_dir.join(file_rel).parent().unwrap().to_path_buf();
             if !uexp_path.exists() && !uasset_path.exists() { continue; }
             
-            let (file_name, r) = compile(entry.path(), uexp_path, uasset_path, out_dir, file_kind, print_fn)?;
+            let (file_name, r) = compile(entry.path(), uexp_path, uasset_path, out_dir, file_kind, hook_fn)?;
             
             results.push((file_name, r));
         }
@@ -106,7 +106,7 @@ static SIG_FILE: LazyLock<tempfile::NamedTempFile> = LazyLock::new(|| {
 pub fn package(
     dest_pak_path: impl Path, 
     compiled_root_path: impl Path,
-    install_dir: impl OptionalPath
+    install_dir: Option<impl Path>
 ) -> anyhow::Result<()> {
     let compiled_root_path = compiled_root_path.absolute_dir()?;
     let dest_pak_path = dest_pak_path.absolute()?;
@@ -119,7 +119,7 @@ pub fn package(
     std::fs::copy(SIG_FILE.path(), &sig_file_path)?;
     
     let package_name = dest_pak_path.file_stem().unwrap().to_string_lossy().into_owned();
-    if let Some(install_dir) = install_dir.as_path().map(|d| d.join(&package_name)) {
+    if let Some(install_dir) = install_dir.map(|d| d.as_path().join(&package_name)) {
         std::fs::create_dir_all(&install_dir)?;
         std::fs::copy(&dest_pak_path, &install_dir.join(&package_name).with_extension("pak"))?;
         std::fs::copy(&sig_file_path, &install_dir.join(&package_name).with_extension("sig"))?;
@@ -135,7 +135,7 @@ use suitest::{suite, suite_cfg};
 #[suite(build_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::util::sha1_hash;
+    use crate::{path::NoPath, util::sha1_hash};
 
     use super::*;
     use std::{path::PathBuf, sync::Arc};
@@ -247,7 +247,7 @@ mod tests {
         let out_pak = out_dir.join("foo.pak");
         let out_sig = out_dir.join("foo.sig");
         
-        package(&out_pak, &ctx.bms_dir, None).unwrap();
+        package(&out_pak, &ctx.bms_dir, NoPath).unwrap();
         
         assert!(std::fs::exists(&out_pak).is_ok());
         assert!(std::fs::exists(&out_sig).is_ok());
@@ -256,7 +256,7 @@ mod tests {
         let installed_pak = install_dir.join("foo.pak");
         let installed_sig = install_dir.join("foo.sig");
         
-        package(&out_pak, &ctx.bms_dir, install_dir).unwrap();
+        package(&out_pak, &ctx.bms_dir, Some(install_dir)).unwrap();
         assert!(std::fs::exists(&out_pak).is_ok());
         assert!(std::fs::exists(&out_sig).is_ok());
         assert!(std::fs::exists(&installed_pak).is_ok());

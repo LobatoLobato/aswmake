@@ -1,4 +1,3 @@
-#![feature(auto_traits, negative_impls)]
 pub mod tools;
 pub mod parsers;
 pub mod util;

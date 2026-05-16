@@ -9,7 +9,7 @@ use lazy_regex::*;
 
 use crate::error;
 use crate::{tools, util};
-use crate::path::{Path, OptionalPath};
+use crate::path::{OptionalPath, Path};
 use crate::parsers::loc::Loc;
 
 #[derive(Debug)]
@@ -24,14 +24,15 @@ impl super::Parser for BBS  {
 }
 
 impl BBS {
-    pub fn parse(bbs_uexp_path: impl Path, out_dir: impl OptionalPath, loc: Option<&Loc>) -> anyhow::Result<BBS> {
+    pub fn parse(bbs_uexp_path: impl Path, out_dir: Option<impl Path>, loc: Option<&Loc>) -> anyhow::Result<BBS> {
         use std::io::BufRead;
         let bbs_uexp_path = bbs_uexp_path.as_path();
         let bbs_file_name = bbs_uexp_path.file_name().ok_or(error::InvalidFilePath(bbs_uexp_path))?;
+        let bbs_file_name = regex_replace!(r"(_\d+)?\.uexp", &bbs_file_name.to_string_lossy(), ".bbs").to_string();
         let out_dir = out_dir.as_path().or(bbs_uexp_path.parent()).unwrap();
         
-        let bbs_path = out_dir.join(bbs_file_name).with_extension(".bbs");
-        let bbscript_path = bbs_path.with_extension(".bbscript");
+        let bbs_path = out_dir.join(bbs_file_name);
+        let bbscript_path = bbs_path.with_extension("bbscript");
         if bbs_uexp_path.exists() {
             tools::bbspack::extract(&bbs_uexp_path, &bbscript_path)?;
             tools::bbscript::parse(&bbscript_path, &bbs_path, tools::bbscript::TargetGame::GGST)?;
@@ -78,10 +79,11 @@ impl BBS {
         }).collect::<Vec<&Move>>();
         
         fn put_after<'a>(mset: &'a mut Vec<&Move>, k1: &str, k2: &str) {
-            let k1_index = mset.iter().position(|m| m.id == k1).unwrap();
-            let k2_index = mset.iter().position(|m| m.id == k2).unwrap();
-            let v = mset.remove(k1_index);
-            mset.insert(k2_index, v);    
+            if let Some(k1_index) = mset.iter().position(|m| m.id == k1) && 
+               let Some(k2_index) = mset.iter().position(|m| m.id == k2) {
+                let v = mset.remove(k1_index);
+                mset.insert(k2_index, v);        
+            }
         }
         put_after(&mut moves, "HomingJump", "NmlAtk5E");
         put_after(&mut moves, "NmlAtkThrow", "NmlAtk2E");
@@ -103,7 +105,7 @@ impl BBS {
     }
 }
 
-pub fn parse(bbs_path: impl Path, out_dir: impl OptionalPath, loc: Option<&Loc>) -> anyhow::Result<BBS> {
+pub fn parse(bbs_path: impl Path, out_dir: Option<impl Path>, loc: Option<&Loc>) -> anyhow::Result<BBS> {
     BBS::parse(bbs_path, out_dir, loc)
 }
 
@@ -350,7 +352,7 @@ use suitest::{suite, suite_cfg};
 #[suite(bms_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::util::sha1_hash;
+    use crate::{path::NoPath, util::sha1_hash};
 
 use super::*;
     use std::{path::PathBuf, sync::Arc};
@@ -371,7 +373,7 @@ use super::*;
     fn setup() -> (Arc<Context>, ()){
         let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures(Some("bbs"));
         let out_dir = tmp_fixtures_dir_path.join("output");
-        let loc = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.ref.uexp"), &out_dir).unwrap();
+        let loc = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.ref.uexp"), Some(&out_dir)).unwrap();
         
         (Arc::new(Context { 
             loc_inst: loc,
@@ -386,7 +388,7 @@ use super::*;
     
     #[test]
     fn can_parse_to_out_dir_and_render_move_list(ctx: Arc<Context>) {
-        let bbs = BBS::parse(&ctx.bbs_uexp_path, &ctx.out_dir, Some(&ctx.loc_inst)).unwrap();
+        let bbs = BBS::parse(&ctx.bbs_uexp_path, Some(&ctx.out_dir), Some(&ctx.loc_inst)).unwrap();
         let parsed_bbscript_path = &ctx.out_dir.join("BBS_FAU.bbscript");
         
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());
@@ -399,7 +401,7 @@ use super::*;
     
     #[test]
     fn can_parse_to_default_dir_and_render_move_list(ctx: Arc<Context>) {
-        let bbs = BBS::parse(&ctx.bbs_uexp_path, None, Some(&ctx.loc_inst)).unwrap();
+        let bbs = BBS::parse(&ctx.bbs_uexp_path, NoPath, Some(&ctx.loc_inst)).unwrap();
         let parsed_bbscript_path = &&ctx.fixtures_dir_path.join("BBS_FAU.bbscript");
         
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());

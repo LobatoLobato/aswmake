@@ -26,7 +26,7 @@ impl Loc {
         std::io::BufReader::new(decoder)
     }
     
-    pub fn parse(loc_uexp_path: impl Path, out_dir: impl OptionalPath) -> anyhow::Result<Self> {
+    pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> anyhow::Result<Self> {
         let loc_uexp_path = loc_uexp_path.as_path();
         let out_dir = out_dir.as_path().or(loc_uexp_path.parent()).unwrap();
         let loc_file_name = loc_uexp_path.file_name().ok_or(error::InvalidFilePath(loc_uexp_path))?;
@@ -82,7 +82,7 @@ impl Loc {
     }
 }
 
-pub fn parse(loc_uexp_path: impl Path, out_dir: impl OptionalPath) -> anyhow::Result<Loc> {
+pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> anyhow::Result<Loc> {
     return Loc::parse(loc_uexp_path, out_dir);
 }
 
@@ -93,7 +93,7 @@ use suitest::{suite, suite_cfg};
 #[suite(loc_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::util::sha1_hash;
+    use crate::{path::NoPath, util::sha1_hash};
 
     use super::*;
     use std::sync::Arc;
@@ -114,8 +114,8 @@ mod tests {
         let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures(Some("loc"));
         let out_dir = tmp_fixtures_dir_path.join("output");
         
-        let _loc_no_out_dir = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), None).unwrap();
-        let loc_out_dir = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), &out_dir).unwrap();        
+        let _loc_no_out_dir = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), NoPath).unwrap();
+        let loc_out_dir = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), Some(&out_dir)).unwrap();        
         
         (Arc::new(Context { 
             loc_inst: loc_out_dir,
