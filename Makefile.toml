@@ -1,21 +1,19 @@
-[tasks.build_external]
-script = [
-    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path external/bbscript/Cargo.toml",
-    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path external/bbspack/Cargo.toml",
-    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path external/u4pak/Cargo.toml",
-]
-
-[tasks.build]
-dependencies = ["build_external"]
+[env]
+CARGO_MAKE_WORKSPACE_SKIP_MEMBERS = "aswmake-lib"
 
 [tasks.run]
-dependencies = ["build_external"]
 command = "cargo"
 args = ["run"]
 
-[tasks.test]
-description = "Guarantees the mocks exist before running the tests"
-dependencies = ["build_external"]
-env = { "FIXTURES_DIR" = "${CARGO_MAKE_WORKING_DIRECTORY}/target/fixtures" }
+[tasks.test-lib]
+description = "Tests the library"
 command = "cargo"
-args = ["test", "-p", "aswmake", "--lib", "--", "--nocapture"]
+args = ["make", "--makefile", "aswmake-lib/Makefile.toml", "--task", "test"]
+
+[tasks.test-cli]
+description = "Tests the executable"
+command = "cargo"
+args = ["nextest", "run", "-p", "aswmake"]
+
+[tasks.test]
+dependencies = ["test-cli", "test-lib"]

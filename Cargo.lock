@@ -38,9 +38,24 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 name = "aswmake"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "aswmake-lib",
+ "color-print",
+ "lazy-regex",
+ "path-clean",
+ "serde",
+ "serde_derive",
+ "strum 0.28.0",
+ "suitest",
+ "walkdir",
+]
+
+[[package]]
+name = "aswmake-lib"
+version = "0.1.0"
+dependencies = [
  "aes",
  "anyhow",
- "color-print",
  "const_format",
  "dir-diff",
  "encoding_rs",

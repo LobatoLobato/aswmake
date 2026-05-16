@@ -1,9 +1,9 @@
 [submodule "external/bbspack"]
-	path = external/bbspack
+	path = aswmake-lib/external/bbspack
 	url = https://github.com/dobosken/bbspack
 [submodule "external/bbscript"]
-	path = external/bbscript
+	path = aswmake-lib/external/bbscript
 	url = https://github.com/super-continent/bbscript
 [submodule "external/u4pak"]
-	path = external/u4pak
+	path = aswmake-lib/external/u4pak
 	url = https://github.com/panzi/rust-u4pak

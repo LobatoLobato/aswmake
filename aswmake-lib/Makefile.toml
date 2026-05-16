@@ -1,0 +1,27 @@
+[env]
+CARGO_MAKE_WORKSPACE_SKIP_MEMBERS = "aswmake-lib/external/*"
+
+[tasks.init_submodules]
+description = "Initializes git submodules"
+command = "git"
+args = ["submodule", "update", "--init", "--recursive"]
+
+[tasks.update_submodules]
+description = "Updates submodules to upstream version"
+command = "git"
+args = ["submodule", "update", "--remote", "--recursive"]
+
+[tasks.build_submodules]
+script = [
+    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path ${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/external/bbscript/Cargo.toml",
+    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path ${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/external/bbspack/Cargo.toml",
+    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path ${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/external/u4pak/Cargo.toml",
+]
+
+[tasks.build]
+dependencies = ["build_submodules"]
+
+[tasks.test]
+dependencies = ["build_submodules"]
+command = "cargo"
+args = ["nextest", "run", "-p", "aswmake-lib"]
