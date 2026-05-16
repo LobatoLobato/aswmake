@@ -82,4 +82,4 @@ macro_rules! declare_tool {
 pub mod u4pak;
 pub mod bbspack;
 pub mod bbscript;
-pub mod quickbms;
+pub mod repak;

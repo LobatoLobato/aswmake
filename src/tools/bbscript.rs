@@ -1,23 +1,38 @@
+use strum::{EnumString, Display, IntoStaticStr, VariantNames, EnumProperty};
+
 use crate::path::Path;
 
 use super::*;
 
 declare_tool!(BBSCRIPT);
 
-#[derive(Debug)]
+#[derive(Debug, Clone, EnumString, Display, IntoStaticStr, VariantNames, EnumProperty)]
+#[strum(serialize_all = "lowercase")]
 pub enum TargetGame {
+    #[strum(props(aes_key = ""))]
     BBCF,
+    #[strum(props(aes_key = ""))]
     DBFZ,
+    #[strum(props(aes_key = ""))]
     DNF,
+    #[strum(props(aes_key = ""))]
     GBVS,
+    #[strum(props(aes_key = ""))]
     GBVSR,
+    #[strum(props(aes_key = ""))]
     GGREV2,
+    #[strum(props(aes_key = "0x3D96F3E41ED4B90B6C96CA3B2393F8911A5F6A48FE71F54B495E8F1AFD94CD73"))]
     GGST,
+    #[strum(props(aes_key = ""))]
     P4U2
 }
+
 impl TargetGame {
     fn lcname(&self) -> String {
         return format!("{self:?}").to_lowercase();
+    }
+    pub fn aes_key(&self) -> &str {
+        self.get_str("aes_key").unwrap_or_default()
     }
 }
 
@@ -28,7 +43,6 @@ pub fn parse(bbscript_bin_path: impl Path, out_file: impl Path, game: TargetGame
 pub fn rebuild(input_file: impl Path, out_bbscript_bin_path: impl Path, game: TargetGame) -> ToolResult {
     BBSCRIPT!("rebuild", "-o", "--game", game.lcname(), input_file.as_path(), out_bbscript_bin_path.as_path())
 }
-
 
 #[cfg(test)]
 use suitest::{suite, suite_cfg};
