@@ -62,8 +62,6 @@ use suitest::{suite, suite_cfg};
 mod tests {
     use std::{path::PathBuf, sync::Arc};
     use suitest::before_all;
-
-use crate::tools::bbscript::TargetGame;
     
     #[derive(Debug)]
     struct Context {
@@ -88,7 +86,7 @@ use crate::tools::bbscript::TargetGame;
         let pakchunk_dir_path = ctx.fixtures_dir_path.join("pakchunk");
         let out_dir = ctx.fixtures_dir_path.join("extracted");
         let result = super::extract(&ctx.pakchunk_path, &out_dir, 
-            TargetGame::GGST.aes_key(),
+            crate::TargetGame::GGST.aes_key(),
             None,
             |_, _| {},
             |_| {}
@@ -105,7 +103,7 @@ use crate::tools::bbscript::TargetGame;
         let filtered_pakchunk_dir_path = ctx.fixtures_dir_path.join("pakchunk-filtered");
         let out_dir = ctx.fixtures_dir_path.join("extracted");
         let result = super::extract(&ctx.pakchunk_path, &out_dir, 
-            TargetGame::GGST.aes_key(),
+            crate::TargetGame::GGST.aes_key(),
             Some(&[
                 "**/Localization/**/*.uasset", 
                 "**/COL*.uexp"

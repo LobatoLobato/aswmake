@@ -13,6 +13,7 @@ pub fn compile(
     uexp_path: impl Path, 
     uasset_path: impl Path, 
     out_dir: impl Path,
+    target_game: crate::TargetGame,
     file_kind: FileKind,
     hook_fn: Option<fn(&str, Option<&str>)>
 ) -> anyhow::Result<(String, String)> {
@@ -39,7 +40,7 @@ pub fn compile(
     let r = match file_kind {
         FileKind::BBSCRIPT => {
             let rebuild_path = output_path.with_extension("bbscript");
-            bbscript::rebuild(&input_path, &rebuild_path, bbscript::TargetGame::GGST)?;
+            bbscript::rebuild(&input_path, &rebuild_path, target_game)?;
             let r = bbspack::inject(&rebuild_path, out_uexp_path, out_uasset_path)?;
             let _ = std::fs::remove_file(rebuild_path);
             Ok(r)
@@ -55,6 +56,7 @@ pub fn compile_against_bms(
     input_dir: impl Path, 
     bms_dir: impl Path, 
     out_dir: impl Path,
+    target_game: crate::TargetGame,
     hook_fn: Option<fn(&str, Option<&str>)>
 ) -> anyhow::Result<Vec<(String, String)>> {
     let input_dir = input_dir.absolute_dir()?;
@@ -86,7 +88,11 @@ pub fn compile_against_bms(
             let out_dir = out_dir.join(file_rel).parent().unwrap().to_path_buf();
             if !uexp_path.exists() && !uasset_path.exists() { continue; }
             
-            let (file_name, r) = compile(entry.path(), uexp_path, uasset_path, out_dir, file_kind, hook_fn)?;
+            let (file_name, r) = compile(
+                entry.path(), uexp_path, uasset_path, out_dir, 
+                target_game.clone(), file_kind, 
+                hook_fn
+            )?;
             
             results.push((file_name, r));
         }
@@ -135,7 +141,7 @@ use suitest::{suite, suite_cfg};
 #[suite(build_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::{path::NoPath, util::sha1_hash};
+    use crate::{TargetGame, path::NoPath, util::sha1_hash};
 
     use super::*;
     use std::{path::PathBuf, sync::Arc};
@@ -179,7 +185,7 @@ mod tests {
         let input_file = ctx.fixtures_dir_path.join("single/equal/BBS_FAU.bbs");
         let out_dir = ctx.out_dir.join("single/equal");
         
-        compile(input_file, &uexp_path, &uasset_path, &out_dir, FileKind::BBSCRIPT, None).unwrap();
+        compile(input_file, &uexp_path, &uasset_path, &out_dir, TargetGame::GGST, FileKind::BBSCRIPT, None).unwrap();
         
         assert_eq!(sha1_hash(&uexp_path).ok(), sha1_hash(out_dir.join("BBS_FAU.uexp")).ok());
         assert_eq!(sha1_hash(&uasset_path).ok(), sha1_hash(out_dir.join("BBS_FAU.uasset")).ok());
@@ -187,7 +193,7 @@ mod tests {
         let input_file = ctx.fixtures_dir_path.join("single/different/BBS_FAU.bbs");
         let out_dir = ctx.out_dir.join("single/different");
         
-        compile(input_file, &uexp_path, &uasset_path, &out_dir, FileKind::BBSCRIPT, None).unwrap();
+        compile(input_file, &uexp_path, &uasset_path, &out_dir, TargetGame::GGST, FileKind::BBSCRIPT, None).unwrap();
         
         assert_ne!(sha1_hash(&uexp_path).ok(), sha1_hash(out_dir.join("BBS_FAU.uexp")).ok());
         assert_ne!(sha1_hash(&uasset_path).ok(), sha1_hash(out_dir.join("BBS_FAU.uasset")).ok());
@@ -201,7 +207,7 @@ mod tests {
         let input_file = ctx.fixtures_dir_path.join("single/equal/COL_FAU.pac");
         let out_dir = ctx.out_dir.join("single/equal");
         
-        compile(input_file, &uexp_path, &uasset_path, &out_dir, FileKind::PAC, None).unwrap();
+        compile(input_file, &uexp_path, &uasset_path, &out_dir, TargetGame::GGST, FileKind::PAC, None).unwrap();
         
         assert_eq!(sha1_hash(&uexp_path).ok(), sha1_hash(out_dir.join("COL_FAU.uexp")).ok());
         assert_eq!(sha1_hash(&uasset_path).ok(), sha1_hash(out_dir.join("COL_FAU.uasset")).ok());
@@ -209,7 +215,7 @@ mod tests {
         let input_file = ctx.fixtures_dir_path.join("single/different/COL_FAU.pac");
         let out_dir = ctx.out_dir.join("single/different");
         
-        compile(input_file, &uexp_path, &uasset_path, &out_dir, FileKind::PAC, None).unwrap();
+        compile(input_file, &uexp_path, &uasset_path, &out_dir, TargetGame::GGST, FileKind::PAC, None).unwrap();
         
         assert_ne!(sha1_hash(&uexp_path).ok(), sha1_hash(out_dir.join("COL_FAU.uexp")).ok());
         assert_ne!(sha1_hash(&uasset_path).ok(), sha1_hash(out_dir.join("COL_FAU.uasset")).ok());
@@ -221,12 +227,12 @@ mod tests {
         let input_dir = ctx.fixtures_dir_path.join("src/equal");
         let out_dir = ctx.out_dir.join("against_bms/equal");
         
-        compile_against_bms(input_dir, &ctx.bms_dir, &out_dir, None).unwrap();
+        compile_against_bms(input_dir, &ctx.bms_dir, &out_dir, TargetGame::GGST, None).unwrap();
         assert!(!dir_diff::is_different(out_dir, &ctx.bms_dir).unwrap());
         
         let input_dir = ctx.fixtures_dir_path.join("src/different");
         let out_dir = ctx.out_dir.join("against_bms/different");
-        compile_against_bms(input_dir, &ctx.bms_dir, &out_dir, None).unwrap();
+        compile_against_bms(input_dir, &ctx.bms_dir, &out_dir, TargetGame::GGST, None).unwrap();
         
         let out_dir_structure = get_dir_structure(&out_dir);
         let bms_dir_structure = get_dir_structure(&ctx.bms_dir);

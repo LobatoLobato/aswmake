@@ -24,7 +24,12 @@ impl super::Parser for BBS  {
 }
 
 impl BBS {
-    pub fn parse(bbs_uexp_path: impl Path, out_dir: Option<impl Path>, loc: Option<&Loc>) -> anyhow::Result<BBS> {
+    pub fn parse(
+        bbs_uexp_path: impl Path,
+        out_dir: Option<impl Path>, 
+        target_game: crate::TargetGame,
+        loc: Option<&Loc>
+    ) -> anyhow::Result<BBS> {
         use std::io::BufRead;
         let bbs_uexp_path = bbs_uexp_path.as_path();
         let bbs_file_name = bbs_uexp_path.file_name().ok_or(error::InvalidFilePath(bbs_uexp_path))?;
@@ -35,7 +40,7 @@ impl BBS {
         let bbscript_path = bbs_path.with_extension("bbscript");
         if bbs_uexp_path.exists() {
             tools::bbspack::extract(&bbs_uexp_path, &bbscript_path)?;
-            tools::bbscript::parse(&bbscript_path, &bbs_path, tools::bbscript::TargetGame::GGST)?;
+            tools::bbscript::parse(&bbscript_path, &bbs_path, target_game)?;
             let _ = std::fs::remove_file(bbscript_path);
         }
         
@@ -105,8 +110,13 @@ impl BBS {
     }
 }
 
-pub fn parse(bbs_path: impl Path, out_dir: Option<impl Path>, loc: Option<&Loc>) -> anyhow::Result<BBS> {
-    BBS::parse(bbs_path, out_dir, loc)
+pub fn parse(
+    bbs_path: impl Path, 
+    out_dir: Option<impl Path>, 
+    target_game: crate::TargetGame, 
+    loc: Option<&Loc>
+) -> anyhow::Result<BBS> {
+    BBS::parse(bbs_path, out_dir, target_game, loc)
 }
 
 
@@ -352,7 +362,7 @@ use suitest::{suite, suite_cfg};
 #[suite(bms_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::{path::NoPath, util::sha1_hash};
+    use crate::{TargetGame, path::NoPath, util::sha1_hash};
 
 use super::*;
     use std::{path::PathBuf, sync::Arc};
@@ -388,7 +398,7 @@ use super::*;
     
     #[test]
     fn can_parse_to_out_dir_and_render_move_list(ctx: Arc<Context>) {
-        let bbs = BBS::parse(&ctx.bbs_uexp_path, Some(&ctx.out_dir), Some(&ctx.loc_inst)).unwrap();
+        let bbs = BBS::parse(&ctx.bbs_uexp_path, Some(&ctx.out_dir), TargetGame::GGST, Some(&ctx.loc_inst)).unwrap();
         let parsed_bbscript_path = &ctx.out_dir.join("BBS_FAU.bbscript");
         
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());
@@ -401,7 +411,7 @@ use super::*;
     
     #[test]
     fn can_parse_to_default_dir_and_render_move_list(ctx: Arc<Context>) {
-        let bbs = BBS::parse(&ctx.bbs_uexp_path, NoPath, Some(&ctx.loc_inst)).unwrap();
+        let bbs = BBS::parse(&ctx.bbs_uexp_path, NoPath, TargetGame::GGST, Some(&ctx.loc_inst)).unwrap();
         let parsed_bbscript_path = &&ctx.fixtures_dir_path.join("BBS_FAU.bbscript");
         
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());
