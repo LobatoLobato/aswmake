@@ -71,9 +71,89 @@ pub fn link_ms(ms_dir: impl Path, link_dir: impl Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn m_s(game_pak_path: impl Path, ms_dir: impl Path, target_game: aswmake_lib::TargetGame) -> anyhow::Result<()> {    
+    let game_pak_path = game_pak_path.absolute_file()?;
+    let ms_dir = ms_dir.absolute()?;
+    
+    std::fs::create_dir_all(&ms_dir)?;
+    
+    let loc_file_path = aswmake_lib::tools::repak::extract(
+        &game_pak_path, 
+        &ms_dir,
+        target_game.aes_key(),
+        Some(&["**/Localization/INT/REDGame.uexp"]),
+        |rel_file_path, _| {println!("Extracting {rel_file_path}");},
+        |_| {}
+    )?[0].clone();
+    
+    println!("Processing loc file...");
+    let loc = aswmake_lib::parsers::loc::parse(loc_file_path, NoPath)?; 
+    
+    println!("Extracting game files...");
+    aswmake_lib::tools::repak::extract(
+        &game_pak_path, 
+        &ms_dir,
+        target_game.aes_key(),
+        Some(&[
+            "**/Chara/**/Data/**/BBS_*",
+            "**/Chara/**/Data/**/COL_*"
+        ]),
+        |rel_file_path, _| {println!("Extracting {rel_file_path}...");},
+        |p| {
+            let file_name = p.file_name().unwrap().to_string_lossy();
+            let extension = p.extension().unwrap();
+            let parent = p.parent().unwrap();
+            let mut parsed_file_ext: Option<&str> = None;
+            let mut bbs = None;
+            
+            if extension != "uexp" { 
+                if extension == "uasset" && !parent.ends_with("Data"){
+                    let _ = std::fs::remove_file(p);    
+                }
+                return; 
+            }
+            
+            if file_name.starts_with("BBS_") {
+                println!("Processing {}", file_name);
+                
+                match aswmake_lib::parsers::bbs::parse(p, NoPath, target_game.clone(), Some(&loc)) {
+                    Ok(b) => bbs = Some(b),
+                    Err(e) => return eprintln!("Error parsing BBS {}: {:?}", file_name, e)
+                }
+                parsed_file_ext = Some("bbs");
+            } else if file_name.starts_with("COL_") {
+                println!("Processing {}", file_name);
+                
+                let normalized_name = regex_replace!(r"(_\d+)?\.uexp", &file_name, ".pac").to_string();
+                if let Err(e) = aswmake_lib::tools::bbspack::extract(p, parent.join(normalized_name)) {
+                    eprintln!("Error extracting COL {}: {:?}", file_name, e);
+                    return;
+                }
+                parsed_file_ext = Some("pac");
+            }
+            
+            if !parent.ends_with("Data") {
+                let _ = std::fs::remove_file(p.with_extension("uexp"));
+            } else if let Some(parsed_file_ext) = parsed_file_ext {
+                if let Some(bbs) = bbs && !file_name.ends_with("EF.uexp") {
+                    let _ = std::fs::write(parent.join("movelist.json"), bbs.render());
+                }
+                let dest_dir = parent.join("current");
+                let parsed_file = p.with_extension(parsed_file_ext);
+                let parsed_file_dest = dest_dir.join(file_name.as_ref()).with_extension(parsed_file_ext);
+                let _ = std::fs::create_dir_all(&dest_dir);
+                let _ = std::fs::rename(&parsed_file, parsed_file_dest);
+            }
+        }
+    )?;
+    
+    println!("Done.");
+    
+    Ok(())
+}
 
 pub fn compile_and_package(cfg: crate::cfg::ProjectConfig, compiled_dir: PathBuf, package_path: PathBuf) -> anyhow::Result<()> {
-    aswmake_lib::build::compile_against_bms(&cfg.src_dir, &cfg.ms_dir, &compiled_dir, cfg.target_game,
+    aswmake_lib::build::compile_against_ms(&cfg.src_dir, &cfg.ms_dir, &compiled_dir, cfg.target_game,
         Some(|file_name, result| {
             if let Some(result) = result {
                 result.lines().for_each(|l| { cprintln!("<yellow>></yellow><green> {l} </green>"); });

@@ -52,7 +52,7 @@ pub fn compile(
     Ok((file_name, r))
 }
 
-pub fn compile_against_bms(
+pub fn compile_against_ms(
     input_dir: impl Path, 
     bms_dir: impl Path, 
     out_dir: impl Path,
@@ -227,12 +227,12 @@ mod tests {
         let input_dir = ctx.fixtures_dir_path.join("src/equal");
         let out_dir = ctx.out_dir.join("against_bms/equal");
         
-        compile_against_bms(input_dir, &ctx.bms_dir, &out_dir, TargetGame::GGST, None).unwrap();
+        compile_against_ms(input_dir, &ctx.bms_dir, &out_dir, TargetGame::GGST, None).unwrap();
         assert!(!dir_diff::is_different(out_dir, &ctx.bms_dir).unwrap());
         
         let input_dir = ctx.fixtures_dir_path.join("src/different");
         let out_dir = ctx.out_dir.join("against_bms/different");
-        compile_against_bms(input_dir, &ctx.bms_dir, &out_dir, TargetGame::GGST, None).unwrap();
+        compile_against_ms(input_dir, &ctx.bms_dir, &out_dir, TargetGame::GGST, None).unwrap();
         
         let out_dir_structure = get_dir_structure(&out_dir);
         let bms_dir_structure = get_dir_structure(&ctx.bms_dir);

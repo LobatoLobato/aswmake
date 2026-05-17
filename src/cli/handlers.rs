@@ -44,7 +44,40 @@ pub fn new(cfg: &mut crate::cfg::ToolConfig) -> anyhow::Result<()> {
 }
 
 pub fn ms(cfg: &mut crate::cfg::ToolConfig, command: &cli::MsCommands) -> anyhow::Result<()> {
-    todo!();
+    if let (is_valid, game) = command.validate_game() && !is_valid {
+        println!("Invalid game \"{game}\". The possible keys are:");
+        for game in aswmake_lib::TargetGame::VARIANTS { println!(">  {game}"); }
+        return Ok(());
+    }
+    
+    match command {
+        cli::MsCommands::Add { game, pak_path } => {
+            let ms_path = cfg.ms_dir().join(&game);
+            let target_game = game.parse::<aswmake_lib::TargetGame>()?;
+            cli::ops::m_s(&pak_path, PathBuf::from(&ms_path), target_game)?;
+            cfg.paks.insert(game.to_owned(), crate::cfg::GamePak::new(pak_path, ms_path)?);
+            
+            cfg.store()?;
+        },
+        cli::MsCommands::Remove { game } => {
+            if let Some(pak) = cfg.paks.remove(game) {
+                std::fs::remove_dir_all(pak.ms_dir)?;
+                cfg.store()?;    
+            }
+        }
+        cli::MsCommands::Link { game } => {
+            cli::ops::link_ms(cfg.ms_dir().join(game), game)?;
+        }
+        cli::MsCommands::Update { game } => {
+            if let Some(pak) = cfg.paks.get(game) {
+                let target_game = game.parse::<aswmake_lib::TargetGame>()?;
+                cli::ops::m_s(&pak.path, cfg.ms_dir().join(game), target_game)?;
+            } else {
+                return Err(anyhow::format_err!("No registered pak path for {game}"));
+            }
+        }
+    };
+    Ok(())
 }
 
 pub fn build(cfg_root_path: impl Path) -> anyhow::Result<()> {
