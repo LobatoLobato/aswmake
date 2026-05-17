@@ -70,3 +70,21 @@ pub fn link_ms(ms_dir: impl Path, link_dir: impl Path) -> anyhow::Result<()> {
     std::os::windows::fs::symlink_dir(ms_dir, link_dir)?;
     Ok(())
 }
+
+
+pub fn compile_and_package(cfg: crate::cfg::ProjectConfig, compiled_dir: PathBuf, package_path: PathBuf) -> anyhow::Result<()> {
+    aswmake_lib::build::compile_against_bms(&cfg.src_dir, &cfg.ms_dir, &compiled_dir, cfg.target_game,
+        Some(|file_name, result| {
+            if let Some(result) = result {
+                result.lines().for_each(|l| { cprintln!("<yellow>></yellow><green> {l} </green>"); });
+                cprintln!("<blue>-----------------------------------------</blue>");    
+            } else {
+                cprintln!("<yellow>Compiling {file_name}</yellow>...");
+            }
+        })
+    )?;
+    
+    aswmake_lib::build::package(package_path, compiled_dir, cfg.install_dir.as_ref())?;
+    
+    Ok(())
+}

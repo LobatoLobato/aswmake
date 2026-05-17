@@ -48,5 +48,11 @@ pub fn ms(cfg: &mut crate::cfg::ToolConfig, command: &cli::MsCommands) -> anyhow
 }
 
 pub fn build(cfg_root_path: impl Path) -> anyhow::Result<()> {
-    todo!();
+    let cfg = crate::cfg::ProjectConfig::load(cfg_root_path.as_path().join("aswmake.toml"))?;
+    
+    let compiled_dir = cfg.build_dir.join("compiled");
+    let package_path = cfg.build_dir.join(&cfg.project_name).with_extension("pak");
+    
+    cli::ops::compile_and_package(cfg, compiled_dir, package_path)
 }
+
