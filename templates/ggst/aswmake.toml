@@ -1,0 +1,5 @@
+name = "{{PROJECT_NAME}}"
+game = "{{TARGET_GAME}}"
+
+src_dir = "src"
+build_dir = "build"
