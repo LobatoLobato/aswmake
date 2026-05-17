@@ -1,7 +1,8 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use color_print::cprintln;
 use include_dir::{Dir, include_dir};
+use itertools::Itertools;
 use lazy_regex::regex_replace;
 use path_clean::PathClean as _;
 
@@ -16,28 +17,66 @@ pub fn scaffold(tool_cfg: &crate::cfg::ToolConfig, project_cfg: &crate::cfg::Pro
     std::fs::create_dir_all(&project_dir)?;
     
     for entry in TEMPLATE_DIR.get_dir(&target_game).unwrap().find("**/*").unwrap() {
-        if let Some(file) = entry.as_file() {
+        if let Some(file) = entry.as_file() && !file.path().ends_with("aswmake.toml"){
             let path = project_dir.join(file.path().strip_prefix(&target_game).unwrap());
             std::fs::create_dir_all(path.parent().unwrap())?;
             std::fs::write(path, file.contents())?;
         }
     }
     
-    let aswmake_toml_path = project_dir.join("aswmake.toml");
-    let aswmake_toml = std::fs::read_to_string(&aswmake_toml_path)?;
-    std::fs::write(aswmake_toml_path, aswmake_toml
+    write_aswmake_toml(project_cfg, &project_dir)?;
+    write_dotenv(project_cfg, project_dir)?;
+    
+    link_ms(tool_cfg.ms_dir().join(target_game), &project_cfg.ms_dir)
+}
+pub fn scaffold_min(tool_cfg: &crate::cfg::ToolConfig, project_cfg: &crate::cfg::ProjectConfig) -> anyhow::Result<()> {
+    let cwd = std::env::current_dir().unwrap();
+    let project_dir = cwd.join(&project_cfg.project_name);
+    let target_game = project_cfg.target_game.to_string();
+    
+    write_aswmake_toml(project_cfg, &project_dir)?;
+    write_dotenv(project_cfg, project_dir)?;
+    
+    link_ms(tool_cfg.ms_dir().join(target_game), &project_cfg.ms_dir)
+}
+
+fn write_aswmake_toml(project_cfg: &crate::cfg::ProjectConfig, project_dir: impl Path) -> anyhow::Result<()> {
+    let target_game = project_cfg.target_game.to_string();
+    let project_toml = project_dir.as_path().join("aswmake.toml");
+    if project_toml.exists() { 
+        println!("{}/aswmake.toml already exists.", project_dir.as_path().file_name().unwrap().display());
+        return Ok(());
+    }
+    
+    let f = TEMPLATE_DIR.get_dir(&target_game).unwrap().find("**/aswmake.toml").unwrap().next().unwrap();
+    let aswmake_toml_contents = f.as_file().unwrap().contents_utf8().unwrap();
+    std::fs::write(project_toml, aswmake_toml_contents
         .replace("{{PROJECT_NAME}}", &project_cfg.project_name)
-        .replace("{{TARGET_GAME}}", &project_cfg.target_game.to_string())
+        .replace("{{TARGET_GAME}}", &target_game)
     )?;
+    Ok(())
+}
+fn write_dotenv(project_cfg: &crate::cfg::ProjectConfig, project_dir: impl Path) -> anyhow::Result<()> {
+    type DotEnv = HashMap<String, String>;
+    let dotenv_path = project_dir.as_path().join(".env");
+    let mut dotenv: DotEnv = HashMap::new();
     
-    std::fs::write(project_dir.join(".env"), format!("GAME_PAK_PATH=\"{}\"\nINSTALL_DIR=\"{}\"", 
-        project_cfg.game_pak_path.display(),
-        project_cfg.install_dir.as_ref().and_then(|d| d.to_str()).unwrap_or("\"/path/to/mods_folder\"")
-    ))?;
+    if dotenv_path.exists() {
+        dotenv.extend(dotenvy::from_path_iter(&dotenv_path)?.collect::<Result<DotEnv, _>>()?);
+    } 
     
-    let game_ms_dir = tool_cfg.ms_dir().join(project_cfg.target_game.to_string());
+    if !dotenv.contains_key("ASWM_GAME_PAK_PATH") {
+        let game_pak_path = project_cfg.game_pak_path.to_string_lossy().into_owned();
+        dotenv.insert("ASWM_GAME_PAK_PATH".into(), game_pak_path);
+    }
+    if !dotenv.contains_key("ASWM_INSTALL_DIR") {
+        let install_dir = project_cfg.install_dir.clone().unwrap_or("/path/to/mods_folder".to_path_buf());
+        dotenv.insert("ASWM_INSTALL_DIR".into(), install_dir.to_string_lossy().into_owned());
+    }
     
-    link_ms(game_ms_dir, &project_cfg.ms_dir)?;
+    let dotenv_content = dotenv.iter().map(|(k, v)| format!("{k}=\"{}\"", v.replace('"', ""))).join("\n");
+    std::fs::write(dotenv_path, dotenv_content)?;
+    
     Ok(())
 }
 

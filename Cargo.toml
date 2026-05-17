@@ -22,6 +22,7 @@ path-clean = { workspace = true }
 walkdir = { workspace = true }
 lazy-regex = { workspace = true }
 suitest = { workspace = true }
+itertools = { workspace = true }
 
 [workspace]
 exclude = [
@@ -39,3 +40,4 @@ path-clean = "1.0.1"
 walkdir = "2.5.0"
 lazy-regex = "3.6.0"
 suitest = "0.1.4"
+itertools = "0.14.0"

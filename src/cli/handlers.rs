@@ -13,8 +13,10 @@ pub fn new(cfg: &mut crate::cfg::ToolConfig) -> anyhow::Result<()> {
         .prompt()?;
     
     let project_dir = std::env::current_dir().unwrap().join(&project_name);
-    if project_dir.exists() {
-        println!("⚠️ {} is not an empty directory.", project_dir.display());
+    let use_scaffold = !project_dir.exists();
+    
+    if project_dir.is_dir() && project_dir.join("aswmake.toml").is_file() {
+        println!("{} is already an aswmake project.", project_dir.display());
         return Err(aswmake_lib::error::InvalidFilePath(project_name));
     }
     
@@ -38,7 +40,11 @@ pub fn new(cfg: &mut crate::cfg::ToolConfig) -> anyhow::Result<()> {
         install_dir.map(PathBuf::from)
     );
     
-    cli::ops::scaffold(&cfg, &pcfg)?;
+    if use_scaffold {
+        cli::ops::scaffold(&cfg, &pcfg)?;
+    } else {
+        cli::ops::scaffold_min(&cfg, &pcfg)?;
+    }
     
     Ok(())
 }

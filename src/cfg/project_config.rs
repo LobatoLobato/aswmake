@@ -37,7 +37,7 @@ impl ProjectConfig {
     
     pub fn load(cfg_path: impl Path) -> anyhow::Result<Self> {
         let mut cfg_path = cfg_path.absolute()?;
-        if cfg_path.is_dir() { cfg_path = cfg_path.join("aswmake_lib.toml"); }
+        if cfg_path.is_dir() { cfg_path = cfg_path.join("aswmake.toml"); }
         let dotenv_path = cfg_path.parent().unwrap().join(".env");
         let contents = std::fs::read_to_string(&cfg_path)?;
         
@@ -58,8 +58,8 @@ impl ProjectConfig {
             src_dir: src_dir.to_path_buf(), 
             ms_dir: target_game.to_path_buf(),
             build_dir: build_dir.to_path_buf(), 
-            game_pak_path: dotenv.get("GAME_PAK_PATH").unwrap().to_path_buf(), 
-            install_dir: dotenv.get("INSTALL_DIR").map(String::to_path_buf)
+            game_pak_path: dotenv.get("ASWM_GAME_PAK_PATH").unwrap().to_path_buf(), 
+            install_dir: dotenv.get("ASWM_INSTALL_DIR").map(String::to_path_buf)
         })
     }
 }

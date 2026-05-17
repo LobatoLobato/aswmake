@@ -97,6 +97,7 @@ dependencies = [
  "dotenvy",
  "include_dir",
  "inquire",
+ "itertools",
  "lazy-regex",
  "path-clean",
  "serde",
