@@ -8,7 +8,7 @@ pub fn sha1_hash_bytes(buffer: &Vec<u8>) -> anyhow::Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
-pub fn sha1_hash(path: impl Path) -> std::io::Result<String> {
+pub fn sha1_hash(path: impl Path) -> anyhow::Result<String> {
     use sha1::{Sha1, Digest};
     use std::io::Read;
     let mut file = std::fs::File::open(path.as_path())?;

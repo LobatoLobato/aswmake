@@ -115,6 +115,7 @@ version = "0.1.0"
 dependencies = [
  "aes",
  "anyhow",
+ "byteorder",
  "const_format",
  "dir-diff",
  "encoding_rs",

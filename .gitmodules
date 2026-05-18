@@ -1,6 +1,3 @@
-[submodule "external/bbspack"]
-	path = aswmake-lib/external/bbspack
-	url = https://github.com/dobosken/bbspack
 [submodule "external/bbscript"]
 	path = aswmake-lib/external/bbscript
 	url = https://github.com/super-continent/bbscript
