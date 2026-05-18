@@ -20,6 +20,7 @@ sha1 = "0.11.0"
 tempfile = "3.27.0"
 byteorder = "1.5.0"
 
+repak = { path = "external/repak/repak", features = ["oodle"] }
 bbscript = { path = "external/bbscript" }
 
 anyhow = { workspace = true }

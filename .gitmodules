@@ -1,3 +1,6 @@
 [submodule "aswmake-lib/external/bbscript"]
 	path = aswmake-lib/external/bbscript
 	url = https://github.com/LobatoLobato/bbscript
+[submodule "aswmake-lib/external/repak"]
+	path = aswmake-lib/external/repak
+	url = https://github.com/LobatoLobato/repak

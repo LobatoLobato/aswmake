@@ -1,7 +1,8 @@
 use std::{fs::File, io::BufReader, path::PathBuf, str::FromStr};
 
 use aes::cipher::{KeyInit as _};
-use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator};
+use itertools::Itertools;
+use rayon::iter::{IntoParallelRefIterator as _, ParallelBridge as _, ParallelIterator};
 use glob_match::glob_match;
 
 use crate::{AResult, error, path::Path, util::Sha1Hash};
@@ -20,9 +21,9 @@ pub enum PakFileKind {
     Other(String)
 }
 
-pub struct PakFile {
+pub struct PakFile<'a> {
     pub hash: Sha1Hash,
-    pub path: PathBuf,
+    pub path: &'a std::path::Path,
     pub size: usize,
     pub kind: PakFileKind
 }
@@ -33,6 +34,8 @@ pub struct PakReader {
     pak_path: PathBuf,
     aes_key: aes::Aes256
 }
+
+pub type SimpleEntry<'a> = (Sha1Hash, &'a std::path::Path);
 
 impl PakReader {
     pub fn new(pak_path: impl Path, aes_key: &str) -> AResult<Self> {
@@ -168,28 +171,38 @@ impl PakReader {
         Ok(())
     }
     
-    pub fn list(&self, filters: Option<&[&str]>) -> anyhow::Result<Vec<PakFile>> {
-        let filter = |file_path: &&String| if let Some(filters) = filters {
-            filters.iter().any(|filter| glob_match(filter, file_path))
-        } else {
-            true
+    
+    pub fn list<'a>(&'a self, filters: Option<&[&str]>) -> AResult<Vec<PakFile<'a>>> {
+        self.list_iter(filters).par_bridge().collect()
+    }
+    pub fn list_simple<'a>(&'a self, filters: Option<&[&str]>) -> AResult<Vec<SimpleEntry<'a>>> {
+        self.list_simple_iter(filters).par_bridge().collect()
+    }
+    pub fn list_simple_iter<'a>(&'a self, filters: Option<&[&str]>) -> impl Iterator<Item = AResult<SimpleEntry<'a>>> {
+        self.list_iter(filters).map(|pf| pf.map(|pf| (pf.hash, pf.path)))
+    }
+    pub fn list_iter<'a>(&'a self, filters: Option<&[&str]>) -> impl Iterator<Item = AResult<PakFile<'a>>> {
+        let filter = move |file_path: &'a String| match filters {
+            Some(filters) => filters.iter().any(|filter| glob_match(filter, file_path)).then_some(file_path),
+            None => Some(file_path)
         };
-        
-        self.pak.files().par_iter().filter(filter).map(|path| {
-            let mut thread_file = Self::create_buf_reader(&self.pak_path)?;
-            let mut buffer = vec![];
-            self.pak.read_file(&path, &mut thread_file, &mut buffer)?;
-            
-            let hash = crate::util::sha1_hash_bytes(&buffer);
-            let size = buffer.len();
-            let kind = if let Some(ext) = path.as_path().extension() {
-                PakFileKind::from_str(&ext.to_string_lossy())?
-            } else { 
-                PakFileKind::Other(String::new())
-            };
-            
-            Ok(PakFile {path: path.to_path_buf(), hash, size, kind })
-        }).collect::<anyhow::Result<Vec<PakFile>>>()
+           
+        self.pak.files_ref().into_iter().filter_map(move |file_path| filter(file_path))
+            .map(move |path| -> AResult<PakFile<'_>> {
+                let mut thread_file = Self::create_buf_reader(&self.pak_path)?;
+                let mut buffer = vec![];
+                self.pak.read_file(&path, &mut thread_file, &mut buffer)?;
+                
+                let hash = crate::util::sha1_hash_reader(std::io::Cursor::new(&buffer))?;
+                let size = buffer.len();
+                let kind = if let Some(ext) = path.as_path().extension() {
+                    PakFileKind::from_str(&ext.to_string_lossy())?
+                } else { 
+                    PakFileKind::Other(String::new())
+                };
+                
+                Ok(PakFile {path: path.as_path(), hash, size, kind })
+            })
     }
     
     pub fn read_file(&self, file_path: impl Path) -> AResult<Vec<u8>> {
@@ -201,34 +214,24 @@ impl PakReader {
     
     pub fn validate(&self, dir_path: impl Path, filters: Option<&[&str]>) -> bool {
         let Ok(dir_path) = dir_path.absolute_dir() else {return false};
-        let filter = |file_path: &&String| if let Some(filters) = filters {
-            filters.iter().any(|filter| glob_match(filter, file_path))
-        } else {
-            true
-        };
+        let filter = |file_path: &std::path::Path| filters.map(|filters| {
+            filters.iter().any(|filter| glob_match(filter, &file_path.to_string_lossy()))
+        }).unwrap_or(true);
         
-        if let Ok(pak_list) = self.list(None) {
-            let mut dir_files: Vec<(Sha1Hash, PathBuf)> = walkdir::WalkDir::new(&dir_path.as_path()).into_iter()
-                .filter_map(|e| e.ok().take_if(|e| e.file_type().is_file()))
-                .filter(|e| filter(&&e.path().to_string_lossy().into_owned()))
-                .map(|e| {
-                    let full_path = e.into_path();
-                    let rel_path = full_path.strip_prefix(&dir_path.as_path()).unwrap().to_path_buf();
-                    let hash = crate::util::sha1_hash_file(full_path).unwrap();
-                    
-                    (hash, rel_path)
-                })
-                .collect();
-            let mut pak_list: Vec<(Sha1Hash, PathBuf)> = pak_list.iter()
-                .filter(|pf| filter(&&pf.path.to_string_lossy().into_owned()))
-                .map(|pf| (pf.hash.clone(), pf.path.clone())).collect();
-            pak_list.sort();
-            dir_files.sort();
-            
-            return pak_list == dir_files;
-        }
+        let pak_list = self.list_simple_iter(filters)
+            .filter_map(|pf| pf.ok())
+            .sorted_by(|a, b| Ord::cmp(a.1, b.1));
         
-        false
+        walkdir::WalkDir::new(&dir_path.as_path()).into_iter()
+            .filter_map(|e| e.ok().take_if(|e| e.file_type().is_file()))
+            .filter(|e| filter(e.path())).sorted_by(|a, b| Ord::cmp(a.path(), b.path()))
+            .zip_longest(pak_list).all(|z| {
+                let itertools::EitherOrBoth::Both(df, pf) = z else { return false; };
+                let rel_path = df.path().strip_prefix(&dir_path.as_path()).unwrap();
+                let hash = crate::util::sha1_hash_file(df.path()).unwrap();
+                
+                pf.0 == hash && pf.1 == rel_path       
+            })
     }
 
     fn create_buf_reader(pak_path: impl Path) -> AResult<BufReader<File>> {
@@ -257,9 +260,9 @@ pub fn pack(
     PakReader::pack_static(aes_key, version, mount_point, input_dir, out_pak)
 }
 
-pub fn list<'a>(pak_path: impl Path, aes_key: &str, filters: Option<&[&str]>) -> AResult<Vec<PakFile>> {
-    PakReader::new(pak_path, aes_key)?.list(filters)
-}
+// pub fn list<'a>(pak_path: impl Path, aes_key: &str, filters: Option<&[&str]>) -> AResult<Vec<PakFile2<'a>>> {
+//     PakReader::new(pak_path, aes_key)?.list(filters)
+// }
 
 pub fn read_file(pak_path: impl Path, aes_key: &str, file_path: impl Path) -> AResult<Vec<u8>> {
     PakReader::new(pak_path, aes_key)?.read_file(file_path)
@@ -332,7 +335,7 @@ mod tests {
             crate::TargetGame::GGST.aes_key()
         ).unwrap();
         
-        let mut list = reader.list(None).unwrap().iter()
+        let mut list = reader.list(None).unwrap().into_iter()
             .map(|pf| (hex::encode(pf.hash), pf.path.to_path_buf()))
             .collect::<Vec<(String, PathBuf)>>();
         expected.sort();

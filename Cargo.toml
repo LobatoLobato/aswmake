@@ -28,8 +28,7 @@ rayon = { workspace = true }
 [workspace]
 exclude = [
     "aswmake-lib/external/bbscript",
-    "aswmake-lib/external/bbspack",
-    "aswmake-lib/external/u4pak"
+    "aswmake-lib/external/repak",
 ]
 
 [workspace.dependencies]
