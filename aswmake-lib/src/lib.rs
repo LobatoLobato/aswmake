@@ -6,6 +6,9 @@ pub mod build;
 pub mod error;
 
 use strum::{EnumString, Display, IntoStaticStr, VariantNames, EnumProperty};
+
+pub type AResult<T> = anyhow::Result<T>;
+
 #[derive(Debug, Clone, Copy, EnumString, Display, IntoStaticStr, VariantNames, EnumProperty)]
 #[strum(serialize_all = "lowercase")]
 pub enum TargetGame {

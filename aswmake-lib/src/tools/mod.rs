@@ -2,6 +2,8 @@ use std::env;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+use crate::AResult;
+
 fn decide_platform(command_str_no_ext: &PathBuf) -> Command {
     if cfg!(target_os = "windows") {
         return Command::new(command_str_no_ext.with_extension("exe"));
@@ -9,7 +11,7 @@ fn decide_platform(command_str_no_ext: &PathBuf) -> Command {
     return Command::new(command_str_no_ext);
 }
 
-fn check_err(cmd_output: std::io::Result<Output>) -> anyhow::Result<String> {
+fn check_err(cmd_output: std::io::Result<Output>) -> AResult<String> {
     if let Ok(mut output) = cmd_output {
         output.stdout.extend_from_slice(&output.stderr);
         let cmd_out = String::from_utf8_lossy(&output.stdout);
@@ -24,7 +26,7 @@ fn check_err(cmd_output: std::io::Result<Output>) -> anyhow::Result<String> {
     Err(cmd_output.err().map(|e| anyhow::Error::msg(e.to_string())).unwrap())
 }
 
-type ToolResult = anyhow::Result<String>;
+type ToolResult = AResult<String>;
 macro_rules! declare_tool {
     ($name:ident) => {
         paste::paste! {

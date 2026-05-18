@@ -21,7 +21,7 @@ use suitest::{suite, suite_cfg};
 mod tests {
     use std::{path::PathBuf, sync::Arc};
     use suitest::before_all;
-    use crate::util::sha1_hash;
+    use crate::util::sha1_hash_file;
     
     #[derive(Debug)]
     struct Context {
@@ -48,7 +48,7 @@ mod tests {
         let result = super::parse(&bbscript_path, &out_file, crate::TargetGame::GGST);
         result.unwrap();
         assert!(std::fs::exists(&out_file).unwrap());
-        assert_eq!(sha1_hash(&out_file).ok(), sha1_hash(expected_file_path).ok());
+        assert_eq!(sha1_hash_file(&out_file).ok(), sha1_hash_file(expected_file_path).ok());
         
         let _ = std::fs::remove_file(out_file);
     }
@@ -62,6 +62,6 @@ mod tests {
         let result = super::rebuild(&bbscript_hr_ref, &out_file, crate::TargetGame::GGST);
         result.unwrap();
         assert!(std::fs::exists(&out_file).unwrap());
-        assert_eq!(sha1_hash(&out_file).ok(), sha1_hash(expected_file_path).ok());
+        assert_eq!(sha1_hash_file(&out_file).ok(), sha1_hash_file(expected_file_path).ok());
     }
 }

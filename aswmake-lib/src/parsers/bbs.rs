@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use itertools::Itertools;
 use lazy_regex::*;
 
-use crate::error;
+use crate::{AResult, error};
 use crate::{tools, util};
 use crate::path::{OptionalPath, Path};
 use crate::parsers::loc::Loc;
@@ -29,7 +29,7 @@ impl BBS {
         out_dir: Option<impl Path>, 
         target_game: crate::TargetGame,
         loc: Option<&Loc>
-    ) -> anyhow::Result<BBS> {
+    ) -> AResult<BBS> {
         use std::io::BufRead;
         let bbs_uexp_path = bbs_uexp_path.as_path();
         let bbs_file_name = bbs_uexp_path.file_name().ok_or(error::InvalidFilePath(bbs_uexp_path))?;
@@ -115,7 +115,7 @@ pub fn parse(
     out_dir: Option<impl Path>, 
     target_game: crate::TargetGame, 
     loc: Option<&Loc>
-) -> anyhow::Result<BBS> {
+) -> AResult<BBS> {
     BBS::parse(bbs_path, out_dir, target_game, loc)
 }
 
@@ -362,7 +362,7 @@ use suitest::{suite, suite_cfg};
 #[suite(bbs_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::{TargetGame, path::NoPath, util::sha1_hash};
+    use crate::{TargetGame, path::NoPath, util::sha1_hash_file};
 
     use super::*;
     use std::{path::PathBuf, sync::Arc};
@@ -404,8 +404,8 @@ mod tests {
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());
         std::fs::exists(&parsed_bbscript_path).unwrap();
         assert_eq!(
-            sha1_hash(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
-            sha1_hash(parsed_bbscript_path).ok()
+            sha1_hash_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
+            sha1_hash_file(parsed_bbscript_path).ok()
         )
     }
     
@@ -417,8 +417,8 @@ mod tests {
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());
         std::fs::exists(&parsed_bbscript_path).unwrap();
         assert_eq!(
-            sha1_hash(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
-            sha1_hash(parsed_bbscript_path).ok()
+            sha1_hash_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
+            sha1_hash_file(parsed_bbscript_path).ok()
         )
     }
 }

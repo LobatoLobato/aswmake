@@ -1,7 +1,7 @@
 use lazy_regex::*;
 use std::{collections::HashMap, fs, io::{BufRead}, path::{PathBuf}};
 use encoding_rs_io::DecodeReaderBytesBuilder;
-use crate::{path::{OptionalPath, Path}, tools};
+use crate::{AResult, path::{OptionalPath, Path}, tools};
 
 use crate::error;
 
@@ -26,7 +26,7 @@ impl Loc {
         std::io::BufReader::new(decoder)
     }
     
-    pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> anyhow::Result<Self> {
+    pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> AResult<Self> {
         let loc_uexp_path = loc_uexp_path.as_path();
         let out_dir = out_dir.as_path().or(loc_uexp_path.parent()).unwrap();
         let loc_file_name = loc_uexp_path.file_name().ok_or(error::InvalidFilePath(loc_uexp_path))?;
@@ -82,7 +82,7 @@ impl Loc {
     }
 }
 
-pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> anyhow::Result<Loc> {
+pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> AResult<Loc> {
     return Loc::parse(loc_uexp_path, out_dir);
 }
 
@@ -93,7 +93,7 @@ use suitest::{suite, suite_cfg};
 #[suite(loc_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::{path::NoPath, util::sha1_hash};
+    use crate::{path::NoPath, util::sha1_hash_file};
 
     use super::*;
     use std::sync::Arc;
@@ -146,11 +146,11 @@ mod tests {
     fn correctly_parses_locuexp_into_readable_format_and_into_json_dicts(ctx: Arc<Context>) {
         assert!(fs::exists(&ctx.loc_file_path_no_out_dir).unwrap());
         assert!(fs::metadata(&ctx.loc_file_path_no_out_dir).unwrap().len() > 0);
-        assert_eq!(sha1_hash(&ctx.loc_file_path_no_out_dir).ok(), sha1_hash(&ctx.ref_loc_file_path).ok());
+        assert_eq!(sha1_hash_file(&ctx.loc_file_path_no_out_dir).ok(), sha1_hash_file(&ctx.ref_loc_file_path).ok());
         
         assert!(fs::exists(&ctx.loc_file_path_out_dir).unwrap());
         assert!(fs::metadata(&ctx.loc_file_path_out_dir).unwrap().len() > 0);
-        assert_eq!(sha1_hash(&ctx.loc_file_path_out_dir).ok(), sha1_hash(&ctx.ref_loc_file_path).ok());
+        assert_eq!(sha1_hash_file(&ctx.loc_file_path_out_dir).ok(), sha1_hash_file(&ctx.ref_loc_file_path).ok());
     }
     
 }

@@ -1,10 +1,10 @@
 use std::{fs::File, io::BufReader, path::PathBuf, str::FromStr};
 
 use aes::cipher::{KeyInit as _};
-use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
+use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator};
 use glob_match::glob_match;
 
-use crate::{error, path::Path, util::sha1_hash_bytes};
+use crate::{AResult, error, path::Path, util::Sha1Hash};
 
 use strum::{EnumString};
 
@@ -21,7 +21,7 @@ pub enum PakFileKind {
 }
 
 pub struct PakFile {
-    pub hash: String,
+    pub hash: Sha1Hash,
     pub path: PathBuf,
     pub size: usize,
     pub kind: PakFileKind
@@ -35,12 +35,12 @@ pub struct PakReader {
 }
 
 impl PakReader {
-    pub fn new(pak_path: impl Path, aes_key: &str) -> anyhow::Result<Self> {
+    pub fn new(pak_path: impl Path, aes_key: &str) -> AResult<Self> {
         let aes_key = aes::Aes256::new_from_slice(&hex::decode(aes_key.trim_start_matches("0x"))?)?;
         Self::new_aes(pak_path, aes_key)
     }
     
-    pub fn new_aes(pak_path: impl Path, aes_key: aes::Aes256) -> anyhow::Result<Self> {
+    pub fn new_aes(pak_path: impl Path, aes_key: aes::Aes256) -> AResult<Self> {
         let pak_path = pak_path.absolute_file().or(Err(error::InvalidFilePath(pak_path)))?;
         
         let pak_builder = repak::PakBuilder::new().key(aes_key.clone());
@@ -56,7 +56,7 @@ impl PakReader {
         filters: Option<&[&str]>,
         before_hook: impl Fn(&String, &PathBuf) + Send + Sync,
         after_hook: impl Fn(&PathBuf) + Send + Sync
-    ) -> anyhow::Result<Vec<PathBuf>> {
+    ) -> AResult<Vec<PathBuf>> {
         let ms_dir = ms_dir.absolute().or(Err(error::InvalidFilePath(ms_dir)))?;
         let filter = |file_path: &&String| if let Some(filters) = filters {
             filters.iter().any(|filter| glob_match(filter, file_path))
@@ -84,7 +84,7 @@ impl PakReader {
             after_hook(&out_path);
             
             Ok(out_path)
-        }).collect::<anyhow::Result<Vec<PathBuf>>>();
+        }).collect::<AResult<Vec<PathBuf>>>();
         
         if !self.validate(&ms_dir, filters) {
             return Err(anyhow::Error::msg(format!("{}'s content does not match {}'s content", 
@@ -103,7 +103,7 @@ impl PakReader {
         mount_point: &str,
         input_dir: impl Path, 
         out_pak: impl Path
-    ) -> anyhow::Result<()> {
+    ) -> AResult<()> {
         let input_dir = input_dir.absolute_dir().or(Err(error::InvalidFilePath(input_dir)))?;
         let out_pak = out_pak.absolute().or(Err(error::InvalidFilePath(out_pak)))?;
         
@@ -136,7 +136,7 @@ impl PakReader {
         
         Ok(())
     } 
-    pub fn pack(&self, input_dir: impl Path, out_pak: impl Path) -> anyhow::Result<()> {
+    pub fn pack(&self, input_dir: impl Path, out_pak: impl Path) -> AResult<()> {
         let input_dir = input_dir.absolute_dir().or(Err(error::InvalidFilePath(input_dir)))?;
         let out_pak = out_pak.absolute().or(Err(error::InvalidFilePath(out_pak)))?;
         
@@ -180,7 +180,7 @@ impl PakReader {
             let mut buffer = vec![];
             self.pak.read_file(&path, &mut thread_file, &mut buffer)?;
             
-            let hash = sha1_hash_bytes(&buffer)?;
+            let hash = crate::util::sha1_hash_bytes(&buffer);
             let size = buffer.len();
             let kind = if let Some(ext) = path.as_path().extension() {
                 PakFileKind::from_str(&ext.to_string_lossy())?
@@ -192,7 +192,7 @@ impl PakReader {
         }).collect::<anyhow::Result<Vec<PakFile>>>()
     }
     
-    pub fn read_file(&self, file_path: impl Path) -> anyhow::Result<Vec<u8>> {
+    pub fn read_file(&self, file_path: impl Path) -> AResult<Vec<u8>> {
         let mut buffer = vec![];
         let mut pak_bufreader = Self::create_buf_reader(&self.pak_path)?;
         self.pak.read_file(&file_path.as_path().to_string_lossy(), &mut pak_bufreader, &mut buffer)?;
@@ -208,18 +208,18 @@ impl PakReader {
         };
         
         if let Ok(pak_list) = self.list(None) {
-            let mut dir_files: Vec<(String, PathBuf)> = walkdir::WalkDir::new(&dir_path.as_path()).into_iter()
+            let mut dir_files: Vec<(Sha1Hash, PathBuf)> = walkdir::WalkDir::new(&dir_path.as_path()).into_iter()
                 .filter_map(|e| e.ok().take_if(|e| e.file_type().is_file()))
                 .filter(|e| filter(&&e.path().to_string_lossy().into_owned()))
                 .map(|e| {
                     let full_path = e.into_path();
                     let rel_path = full_path.strip_prefix(&dir_path.as_path()).unwrap().to_path_buf();
-                    let hash = crate::util::sha1_hash(full_path).unwrap();
+                    let hash = crate::util::sha1_hash_file(full_path).unwrap();
                     
                     (hash, rel_path)
                 })
                 .collect();
-            let mut pak_list: Vec<(String, PathBuf)> = pak_list.iter()
+            let mut pak_list: Vec<(Sha1Hash, PathBuf)> = pak_list.iter()
                 .filter(|pf| filter(&&pf.path.to_string_lossy().into_owned()))
                 .map(|pf| (pf.hash.clone(), pf.path.clone())).collect();
             pak_list.sort();
@@ -231,7 +231,7 @@ impl PakReader {
         false
     }
 
-    fn create_buf_reader(pak_path: impl Path) -> anyhow::Result<BufReader<File>> {
+    fn create_buf_reader(pak_path: impl Path) -> AResult<BufReader<File>> {
         Ok(BufReader::new(File::open(pak_path.as_path())?))
     }
 }
@@ -243,7 +243,7 @@ pub fn unpack(
     filters: Option<&[&str]>,
     before_hook: impl Fn(&String, &PathBuf) + Send + Sync,
     after_hook: impl Fn(&PathBuf) + Send + Sync
-) -> anyhow::Result<Vec<PathBuf>> {
+) -> AResult<Vec<PathBuf>> {
     PakReader::new(pak_path, aes_key)?.unpack(ms_dir, filters, before_hook, after_hook)
 }
 
@@ -253,15 +253,15 @@ pub fn pack(
     mount_point: &str, 
     input_dir: impl Path, 
     out_pak: impl Path
-) -> anyhow::Result<()> {
+) -> AResult<()> {
     PakReader::pack_static(aes_key, version, mount_point, input_dir, out_pak)
 }
 
-pub fn list(pak_path: impl Path, aes_key: &str, filters: Option<&[&str]>) -> anyhow::Result<Vec<PakFile>> {
+pub fn list<'a>(pak_path: impl Path, aes_key: &str, filters: Option<&[&str]>) -> AResult<Vec<PakFile>> {
     PakReader::new(pak_path, aes_key)?.list(filters)
 }
 
-pub fn read_file(pak_path: impl Path, aes_key: &str, file_path: impl Path) -> anyhow::Result<Vec<u8>> {
+pub fn read_file(pak_path: impl Path, aes_key: &str, file_path: impl Path) -> AResult<Vec<u8>> {
     PakReader::new(pak_path, aes_key)?.read_file(file_path)
 }
 
@@ -279,7 +279,7 @@ mod tests {
     use std::{path::PathBuf, sync::Arc};
     use suitest::before_all;
 
-    use crate::util::sha1_hash;
+    use crate::util::sha1_hash_file;
     
     #[derive(Debug)]
     struct Context {
@@ -327,9 +327,14 @@ mod tests {
             (String::from("e07fac2bce905e21fc74322cd7c6c4e7b149b601"), "RED/Content/Chara/FAU/Common/Data/409/COL_FAU.uexp".into()),
             (String::from("d988c554f720aa7bbb7e8d832db52fcbbd5a2cfb"), "RED/Content/Localization/INT/REDGame.uexp".into()),
         ];
-
-        let list = super::list(&ctx.pakchunk_path, crate::TargetGame::GGST.aes_key(), None).expect("Something went wrong with the list command");
-        let mut list = list.iter().map(|pf| (pf.hash.clone(), pf.path.clone())).collect::<Vec<(String, PathBuf)>>();
+        let reader = super::PakReader::new(
+            &ctx.pakchunk_path, 
+            crate::TargetGame::GGST.aes_key()
+        ).unwrap();
+        
+        let mut list = reader.list(None).unwrap().iter()
+            .map(|pf| (hex::encode(pf.hash), pf.path.to_path_buf()))
+            .collect::<Vec<(String, PathBuf)>>();
         expected.sort();
         list.sort();
         
@@ -423,7 +428,7 @@ mod tests {
         );
         result.unwrap();
         
-        assert_eq!(sha1_hash(&packed_path).ok(), sha1_hash(&ctx.pakchunk_path).ok());
+        assert_eq!(sha1_hash_file(&packed_path).ok(), sha1_hash_file(&ctx.pakchunk_path).ok());
         let _ = std::fs::remove_file(packed_path);
     }
     
