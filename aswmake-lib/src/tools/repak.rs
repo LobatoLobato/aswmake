@@ -1,10 +1,10 @@
 use std::{fs::File, io::BufReader, path::PathBuf, str::FromStr};
 
-use aes::cipher::KeyInit as _;
+use aes::cipher::{KeyInit as _};
 use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
 use glob_match::glob_match;
 
-use crate::{error, path::Path, util::sha1_hash_reader};
+use crate::{error, path::Path, util::sha1_hash_bytes};
 
 use strum::{EnumString};
 
@@ -177,13 +177,11 @@ impl PakReader {
         
         self.pak.files().par_iter().filter(filter).map(|path| {
             let mut thread_file = Self::create_buf_reader(&self.pak_path)?;
-            let mut size = 0;
-            let hash = sha1_hash_reader(|buffer: &mut Vec<u8>| {
-                self.pak.read_file(&path, &mut thread_file, buffer)?;
-                size = buffer.len();
-                Ok(())
-            })?;
+            let mut buffer = vec![];
+            self.pak.read_file(&path, &mut thread_file, &mut buffer)?;
             
+            let hash = sha1_hash_bytes(&buffer)?;
+            let size = buffer.len();
             let kind = if let Some(ext) = path.as_path().extension() {
                 PakFileKind::from_str(&ext.to_string_lossy())?
             } else { 
