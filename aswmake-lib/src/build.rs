@@ -1,7 +1,7 @@
 use std::sync::LazyLock;
 
 use crate::path::Path;
-use crate::tools::{bbscript, bbspack, u4pak};
+use crate::tools::{bbscript, bbspack, repak};
 
 pub enum FileKind {
     BBSCRIPT,
@@ -54,20 +54,20 @@ pub fn compile(
 
 pub fn compile_against_ms(
     input_dir: impl Path, 
-    bms_dir: impl Path, 
+    ms_dir: impl Path, 
     out_dir: impl Path,
     target_game: crate::TargetGame,
     hook_fn: Option<fn(&str, Option<&str>)>
 ) -> anyhow::Result<Vec<(String, String)>> {
     let input_dir = input_dir.absolute_dir()?;
-    let bms_dir = bms_dir.absolute_dir()?;
+    let ms_dir = ms_dir.absolute_dir()?;
     
     
     let out_dir = out_dir.absolute()?;
     std::fs::create_dir_all(&out_dir.as_path())?;
     
-    if input_dir == out_dir && bms_dir == out_dir { 
-        return Err(anyhow::Error::msg("input_dir/bms_dir is the same as out_dir")); 
+    if input_dir == out_dir && ms_dir == out_dir { 
+        return Err(anyhow::Error::msg("input_dir/ms_dir is the same as out_dir")); 
     }
     
     let mut results = vec![];
@@ -83,8 +83,8 @@ pub fn compile_against_ms(
             };
             
             let Ok(file_rel) = entry.path().strip_prefix(&input_dir) else { continue; };
-            let uexp_path = bms_dir.join(file_rel).with_extension("uexp");
-            let uasset_path = bms_dir.join(file_rel).with_extension("uasset");
+            let uexp_path = ms_dir.join(file_rel).with_extension("uexp");
+            let uasset_path = ms_dir.join(file_rel).with_extension("uasset");
             let out_dir = out_dir.join(file_rel).parent().unwrap().to_path_buf();
             if !uexp_path.exists() && !uasset_path.exists() { continue; }
             
@@ -110,6 +110,7 @@ static SIG_FILE: LazyLock<tempfile::NamedTempFile> = LazyLock::new(|| {
 });
 
 pub fn package(
+    target_game: crate::TargetGame,
     dest_pak_path: impl Path, 
     compiled_root_path: impl Path,
     install_dir: Option<impl Path>
@@ -121,7 +122,13 @@ pub fn package(
     
     std::fs::create_dir_all(&build_dir)?;
     
-    u4pak::pack(&dest_pak_path, compiled_root_path)?;
+    repak::pack(
+        target_game.aes_key(), 
+        target_game.version(), 
+        target_game.mount_point(), 
+        compiled_root_path, 
+        &dest_pak_path
+    )?;
     std::fs::copy(SIG_FILE.path(), &sig_file_path)?;
     
     let package_name = dest_pak_path.file_stem().unwrap().to_string_lossy().into_owned();
@@ -160,7 +167,7 @@ mod tests {
     struct Context {
         _fixtures_dir: tempfile::TempDir,
         fixtures_dir_path: PathBuf,
-        bms_dir: PathBuf,
+        ms_dir: PathBuf,
         out_dir: PathBuf
     }
     
@@ -171,7 +178,7 @@ mod tests {
         
         (Arc::new(Context { 
             _fixtures_dir: tmp_fixtures_dir,
-            bms_dir: tmp_fixtures_dir_path.join("bms"),
+            ms_dir: tmp_fixtures_dir_path.join("ms"),
             out_dir: out_dir,
             fixtures_dir_path: tmp_fixtures_dir_path
         }), ())
@@ -222,28 +229,28 @@ mod tests {
     }
     
     #[test]
-    fn can_compile_against_bms(ctx: Arc<Context>) {
+    fn can_compile_against_ms(ctx: Arc<Context>) {
         
         let input_dir = ctx.fixtures_dir_path.join("src/equal");
-        let out_dir = ctx.out_dir.join("against_bms/equal");
+        let out_dir = ctx.out_dir.join("against_ms/equal");
         
-        compile_against_ms(input_dir, &ctx.bms_dir, &out_dir, TargetGame::GGST, None).unwrap();
-        assert!(!dir_diff::is_different(out_dir, &ctx.bms_dir).unwrap());
+        compile_against_ms(input_dir, &ctx.ms_dir, &out_dir, TargetGame::GGST, None).unwrap();
+        assert!(!dir_diff::is_different(out_dir, &ctx.ms_dir).unwrap());
         
         let input_dir = ctx.fixtures_dir_path.join("src/different");
-        let out_dir = ctx.out_dir.join("against_bms/different");
-        compile_against_ms(input_dir, &ctx.bms_dir, &out_dir, TargetGame::GGST, None).unwrap();
+        let out_dir = ctx.out_dir.join("against_ms/different");
+        compile_against_ms(input_dir, &ctx.ms_dir, &out_dir, TargetGame::GGST, None).unwrap();
         
         let out_dir_structure = get_dir_structure(&out_dir);
-        let bms_dir_structure = get_dir_structure(&ctx.bms_dir);
+        let ms_dir_structure = get_dir_structure(&ctx.ms_dir);
         
         // Structure is the same but all file's contents are different
-        assert_eq!(out_dir_structure, bms_dir_structure);
+        assert_eq!(out_dir_structure, ms_dir_structure);
         for rel_path in out_dir_structure.iter().filter(|p| p.is_file()) {
             let out_path = out_dir.join(&rel_path);
-            let bms_path = ctx.bms_dir.join(&rel_path);
+            let ms_path = ctx.ms_dir.join(&rel_path);
             
-            assert_ne!(sha1_hash(out_path).ok(), sha1_hash(bms_path).ok());   
+            assert_ne!(sha1_hash(out_path).ok(), sha1_hash(ms_path).ok());   
         }
     }
     
@@ -253,7 +260,7 @@ mod tests {
         let out_pak = out_dir.join("foo.pak");
         let out_sig = out_dir.join("foo.sig");
         
-        package(&out_pak, &ctx.bms_dir, NoPath).unwrap();
+        package(TargetGame::GGST, &out_pak, &ctx.ms_dir, NoPath).unwrap();
         
         assert!(std::fs::exists(&out_pak).is_ok());
         assert!(std::fs::exists(&out_sig).is_ok());
@@ -262,7 +269,7 @@ mod tests {
         let installed_pak = install_dir.join("foo.pak");
         let installed_sig = install_dir.join("foo.sig");
         
-        package(&out_pak, &ctx.bms_dir, Some(install_dir)).unwrap();
+        package(TargetGame::GGST, &out_pak, &ctx.ms_dir, Some(install_dir)).unwrap();
         assert!(std::fs::exists(&out_pak).is_ok());
         assert!(std::fs::exists(&out_sig).is_ok());
         assert!(std::fs::exists(&installed_pak).is_ok());

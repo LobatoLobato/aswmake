@@ -92,6 +92,6 @@ pub fn build(cfg_root_path: impl Path) -> anyhow::Result<()> {
     let compiled_dir = cfg.build_dir.join("compiled");
     let package_path = cfg.build_dir.join(&cfg.project_name).with_extension("pak");
     
-    cli::ops::compile_and_package(cfg, compiled_dir, package_path)
+    cli::ops::compile_and_package(&cfg, compiled_dir, package_path)
 }
 

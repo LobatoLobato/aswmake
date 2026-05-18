@@ -1,6 +1,19 @@
 use crate::path::Path;
 
 
+pub fn sha1_hash_reader(mut fill_buffer: impl FnMut(&mut Vec<u8>) -> anyhow::Result<()>) -> anyhow::Result<String> {
+    use sha1::{Sha1, Digest};
+    let mut hasher = Sha1::new();
+    let mut buffer = Vec::new();
+    
+    fill_buffer(&mut buffer)?;
+    hasher.update(&buffer);
+    
+    let hash = hasher.finalize();
+    
+    Ok(hex::encode(hash))
+}
+
 pub fn sha1_hash(path: impl Path) -> std::io::Result<String> {
     use sha1::{Sha1, Digest};
     use std::io::Read;

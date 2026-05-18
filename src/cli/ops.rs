@@ -6,7 +6,7 @@ use itertools::Itertools;
 use lazy_regex::regex_replace;
 use path_clean::PathClean as _;
 
-use aswmake_lib::path::{NoPath, Path};
+use aswmake_lib::{parsers::{Parser as _, bbs::BBS, loc::Loc}, path::{NoPath, Path}};
 
 static TEMPLATE_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
@@ -116,11 +116,10 @@ pub fn m_s(game_pak_path: impl Path, ms_dir: impl Path, target_game: aswmake_lib
     
     std::fs::create_dir_all(&ms_dir)?;
     
-    let loc_file_path = aswmake_lib::tools::repak::extract(
-        &game_pak_path, 
+    let pak_reader = aswmake_lib::tools::repak::PakReader::new(&game_pak_path, target_game.aes_key())?;
+    let loc_file_path = pak_reader.unpack(
         &ms_dir,
-        target_game.aes_key(),
-        Some(&["**/Localization/INT/REDGame.uexp"]),
+        Some(&[Loc::ms_filter()]),
         |rel_file_path, _| {println!("Extracting {rel_file_path}");},
         |_| {}
     )?[0].clone();
@@ -129,12 +128,10 @@ pub fn m_s(game_pak_path: impl Path, ms_dir: impl Path, target_game: aswmake_lib
     let loc = aswmake_lib::parsers::loc::parse(loc_file_path, NoPath)?; 
     
     println!("Extracting game files...");
-    aswmake_lib::tools::repak::extract(
-        &game_pak_path, 
+    pak_reader.unpack(
         &ms_dir,
-        target_game.aes_key(),
         Some(&[
-            "**/Chara/**/Data/**/BBS_*",
+            BBS::ms_filter(),
             "**/Chara/**/Data/**/COL_*"
         ]),
         |rel_file_path, _| {println!("Extracting {rel_file_path}...");},
@@ -191,7 +188,7 @@ pub fn m_s(game_pak_path: impl Path, ms_dir: impl Path, target_game: aswmake_lib
     Ok(())
 }
 
-pub fn compile_and_package(cfg: crate::cfg::ProjectConfig, compiled_dir: PathBuf, package_path: PathBuf) -> anyhow::Result<()> {
+pub fn compile_and_package(cfg: &crate::cfg::ProjectConfig, compiled_dir: PathBuf, package_path: PathBuf) -> anyhow::Result<()> {
     aswmake_lib::build::compile_against_ms(&cfg.src_dir, &cfg.ms_dir, &compiled_dir, cfg.target_game,
         Some(|file_name, result| {
             if let Some(result) = result {
@@ -203,7 +200,7 @@ pub fn compile_and_package(cfg: crate::cfg::ProjectConfig, compiled_dir: PathBuf
         })
     )?;
     
-    aswmake_lib::build::package(package_path, compiled_dir, cfg.install_dir.as_ref())?;
+    aswmake_lib::build::package(cfg.target_game, package_path, compiled_dir, cfg.install_dir.as_ref())?;
     
     Ok(())
 }

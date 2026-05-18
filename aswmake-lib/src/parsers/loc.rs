@@ -11,7 +11,7 @@ pub struct Loc {
 }
 
 impl super::Parser for Loc {
-    fn bms_filter() -> &'static str {
+    fn ms_filter() -> &'static str {
         return "{}/Localization/INT/REDGame.uexp";
     }
 }

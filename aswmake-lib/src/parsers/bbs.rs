@@ -18,8 +18,8 @@ pub struct BBS {
 }
 
 impl super::Parser for BBS  {
-    fn bms_filter() -> &'static str {
-        return "{}/Chara/{}Data/{}BBS_{}";
+    fn ms_filter() -> &'static str {
+        return "**/Chara/**/Data/**/BBS_*";
     }
 }
 
@@ -359,12 +359,12 @@ static TOKEN_DICT: LazyLock<HashMap<&str, Token>> = LazyLock::new(|| HashMap::fr
 use suitest::{suite, suite_cfg};
 
 #[cfg(test)]
-#[suite(bms_rs)]
+#[suite(bbs_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
     use crate::{TargetGame, path::NoPath, util::sha1_hash};
 
-use super::*;
+    use super::*;
     use std::{path::PathBuf, sync::Arc};
     use suitest::{before_all};
     use tempfile;

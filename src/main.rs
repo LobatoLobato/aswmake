@@ -18,3 +18,16 @@ fn main() -> anyhow::Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+use suitest::{suite, suite_cfg};
+
+#[cfg(test)]
+#[suite(main_rs)]
+#[suite_cfg(sequential = true, verbose = false)]
+mod tests {
+    #[test]
+    fn foo() {
+        assert!(true);
+    }
+}

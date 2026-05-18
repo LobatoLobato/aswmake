@@ -15,7 +15,6 @@ args = ["submodule", "update", "--remote", "--recursive"]
 script = [
     "RUSTFLAGS='-A warnings' cargo build --release --manifest-path ${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/external/bbscript/Cargo.toml",
     "RUSTFLAGS='-A warnings' cargo build --release --manifest-path ${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/external/bbspack/Cargo.toml",
-    "RUSTFLAGS='-A warnings' cargo build --release --manifest-path ${CARGO_MAKE_CURRENT_TASK_INITIAL_MAKEFILE_DIRECTORY}/external/u4pak/Cargo.toml",
 ]
 
 [tasks.build]
