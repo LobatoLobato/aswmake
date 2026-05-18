@@ -4,6 +4,7 @@ pub mod util;
 pub mod path;
 pub mod build;
 pub mod error;
+pub use bbscript;
 
 use strum::{EnumString, Display, IntoStaticStr, VariantNames, EnumProperty};
 
@@ -43,6 +44,18 @@ impl TargetGame {
     pub fn version(&self) -> tools::repak::Version {
         let version_str = self.get_str("version").unwrap_or_default();
         format!("V{}", version_str).parse::<tools::repak::Version>().unwrap()
+    }
+    pub fn to_supported_game(&self) -> bbscript::SupportedGame {
+        match self {
+            TargetGame::BBCF => bbscript::SupportedGame::Bbcf,
+            TargetGame::DBFZ => bbscript::SupportedGame::Dbfz,
+            TargetGame::DNF => bbscript::SupportedGame::Dnf,
+            TargetGame::GBVS => bbscript::SupportedGame::Gbvs,
+            TargetGame::GBVSR => bbscript::SupportedGame::Gbvsr,
+            TargetGame::GGREV2 => bbscript::SupportedGame::Ggrev2,
+            TargetGame::GGST => bbscript::SupportedGame::Ggst,
+            TargetGame::P4U2 => bbscript::SupportedGame::P4u2,
+        }
     }
 }
 
