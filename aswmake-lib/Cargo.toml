@@ -33,3 +33,4 @@ suitest = { workspace = true }
 itertools = { workspace = true }
 rayon = { workspace = true }
 xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+derivative = "2.2.0"

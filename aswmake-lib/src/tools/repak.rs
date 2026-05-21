@@ -7,46 +7,50 @@ use glob_match::glob_match;
 
 use crate::{AResult, error, path::Path, util::HashId};
 
-use strum::{EnumString};
+use strum::{EnumString, Display};
+use derivative::Derivative;
 
 pub use repak::Version;
 
-#[derive(Debug, Clone, EnumString, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, EnumString, Ord, Display, Hash)]
 #[strum(serialize_all = "lowercase")]
 pub enum PakFileKind {
-    Uexp,
     Uasset,
+    Uexp,
     Other
 }
 
+#[derive(Derivative)]
+#[derivative(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PakFile<'a> {
+    #[derivative(Debug="ignore", PartialEq="ignore", PartialOrd="ignore", Ord="ignore")]
     reader: &'a PakReader,
-    pub hash: HashId,
     pub path: &'a std::path::Path,
-    pub size: usize,
-    pub kind: PakFileKind
+    pub kind: PakFileKind,
+    pub size: u64,
+    pub hash: HashId,
 }
 
 impl<'a> PakFile <'a> {
-    fn new(path: &'a String, reader: &'a PakReader) -> AResult<PakFile<'a>> {
+    fn new(path: &'a String, size: u64, reader: &'a PakReader) -> PakFile<'a> {
         let kind = if let Some(ext) = path.as_path().extension() {
-            PakFileKind::from_str(&ext.to_string_lossy())?
+            PakFileKind::from_str(&ext.to_string_lossy()).unwrap_or(PakFileKind::Other)
         } else { 
             PakFileKind::Other
         };
         
-        Ok(PakFile {
+        PakFile {
             reader,
             path: path.as_path(), 
             hash: 1, 
-            size: 1, 
+            size, 
             kind 
-        })
+        }
     }
     pub fn query(&mut self) -> AResult<&Self> {
         let buffer = self.reader.read_file(&self.path)?;
         self.hash = crate::util::hashid_from_reader(std::io::Cursor::new(&buffer))?;
-        self.size = buffer.len();
+        self.size = buffer.len() as u64;
         Ok(self)
     }
 }
@@ -198,26 +202,24 @@ impl PakReader {
     }
     
     
-    pub fn list<'a>(&'a self, filters: Option<&[&str]>) -> AResult<Vec<PakFile<'a>>> {
+    pub fn list<'a>(&'a self, filters: Option<&[&str]>) -> Vec<PakFile<'a>> {
         self.list_iter(filters).par_bridge().collect()
     }
     pub fn list_simple<'a>(&'a self, filters: Option<&[&str]>) -> AResult<Vec<SimpleEntry<'a>>> {
         self.list_simple_iter(filters).par_bridge().collect()
     }
     pub fn list_simple_iter<'a>(&'a self, filters: Option<&[&str]>) -> impl Iterator<Item = AResult<SimpleEntry<'a>>> {
-        self.list_iter(filters).map(|pf| {
-            pf.map(|mut pf| {pf.query().unwrap(); pf}).map(|pf| (pf.hash, pf.path))
-        })
+        self.list_iter(filters).map(|mut pf| {pf.query()?; Ok(pf)}).map(|pf| pf.map(|pf|(pf.hash, pf.path)))
     }
-    pub fn list_iter<'a>(&'a self, filters: Option<&[&str]>) -> impl Iterator<Item = AResult<PakFile<'a>>> {
-        let filter = move |file_path: &'a String| match filters {
-            Some(filters) => filters.iter().any(|filter| glob_match(filter, file_path)).then_some(file_path),
-            None => Some(file_path)
+    pub fn list_iter<'a>(&'a self, filters: Option<&[&str]>) -> impl Iterator<Item = PakFile<'a>> {
+        let filter = move |(file_path, size): (&'a String, u64)| match filters {
+            Some(filters) => filters.iter().any(|filter| glob_match(filter, file_path)).then_some((file_path, size)),
+            None => Some((file_path, size))
         };
            
-        self.pak.files_ref().into_iter()
+        self.pak.files_ref_with_size().into_iter()
             .filter_map(move |file_path| filter(file_path))
-            .map(move |path| PakFile::new(path, self))
+            .map(move |(path, size)| PakFile::new(path, size, self))
     }
     
     pub fn read_file(&self, file_path: impl Path) -> AResult<Vec<u8>> {
