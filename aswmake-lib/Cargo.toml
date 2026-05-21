@@ -16,7 +16,6 @@ indexmap = "2.14.0"
 paste = "1.0.15"
 regex = "1.12.3"
 serde_json = "1.0.149"
-sha1 = "0.11.0"
 tempfile = "3.27.0"
 byteorder = "1.5.0"
 
@@ -33,3 +32,4 @@ lazy-regex = { workspace = true }
 suitest = { workspace = true }
 itertools = { workspace = true }
 rayon = { workspace = true }
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }

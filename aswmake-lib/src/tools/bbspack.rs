@@ -129,7 +129,7 @@ use suitest::{suite, suite_cfg};
 mod tests {
     use std::{path::PathBuf, sync::Arc};
     use suitest::before_all;
-    use crate::{AResult, util::{Sha1Hash, sha1_hash_file, sha1_hash_bytes}};
+    use crate::{AResult, util::{HashId, hashid_from_file, hashid_from_bytes}};
     
     #[derive(Debug)]
     struct Context {
@@ -137,9 +137,9 @@ mod tests {
         fixtures_dir_path: PathBuf,
         bbscript_ref: PathBuf,
         inject_a_assets: (PathBuf, PathBuf),
-        inject_a_hashes: (AResult<Sha1Hash>, AResult<Sha1Hash>),
+        inject_a_hashes: (AResult<HashId>, AResult<HashId>),
         inject_b_assets: (PathBuf, PathBuf),
-        inject_b_hashes: (AResult<Sha1Hash>, AResult<Sha1Hash>),
+        inject_b_hashes: (AResult<HashId>, AResult<HashId>),
     }
     
     #[before_all]
@@ -150,12 +150,12 @@ mod tests {
             tmp_fixtures_dir_path.join("BBS_FAU.inject_a.uexp"),
             tmp_fixtures_dir_path.join("BBS_FAU.inject_a.uasset")
         );
-        let inject_a_hashes = (sha1_hash_file(&inject_a_assets.0), sha1_hash_file(&inject_a_assets.1));
+        let inject_a_hashes = (hashid_from_file(&inject_a_assets.0), hashid_from_file(&inject_a_assets.1));
         let inject_b_assets = (
             tmp_fixtures_dir_path.join("BBS_FAU.inject_b.uexp"),
             tmp_fixtures_dir_path.join("BBS_FAU.inject_b.uasset")
         );
-        let inject_b_hashes = (sha1_hash_file(&inject_b_assets.0), sha1_hash_file(&inject_b_assets.1));
+        let inject_b_hashes = (hashid_from_file(&inject_b_assets.0), hashid_from_file(&inject_b_assets.1));
         
         (Arc::new(Context { 
             _fixtures_dir: tmp_fixtures_dir,
@@ -176,7 +176,7 @@ mod tests {
         
         let result = super::extract_bytes(&uexp_bytes).unwrap();
         
-        assert_eq!(Some(sha1_hash_bytes(&result)), sha1_hash_file(expected_file_path).ok());
+        assert_eq!(Some(hashid_from_bytes(&result)), hashid_from_file(expected_file_path).ok());
     }
     
     #[test]
@@ -188,7 +188,7 @@ mod tests {
         let result = super::extract(&uexp_path, &out_file);
         result.unwrap();
         assert!(std::fs::exists(&out_file).unwrap());
-        assert_eq!(sha1_hash_file(&out_file).ok(), sha1_hash_file(expected_file_path).ok());
+        assert_eq!(hashid_from_file(&out_file).ok(), hashid_from_file(expected_file_path).ok());
         
         let _ = std::fs::remove_file(out_file);
     }
@@ -202,16 +202,16 @@ mod tests {
         let mut uasset_bytes = std::fs::read(&ctx.inject_a_assets.1).unwrap();
         let result = super::inject_bytes(&bbscript_ref_bytes, &mut uexp_bytes, &mut uasset_bytes);
         result.unwrap();
-        assert_eq!(ctx.inject_a_hashes.0.as_ref().ok(), Some(&sha1_hash_bytes(&uexp_bytes)));
-        assert_eq!(ctx.inject_a_hashes.1.as_ref().ok(), Some(&sha1_hash_bytes(&uasset_bytes)));
+        assert_eq!(ctx.inject_a_hashes.0.as_ref().ok(), Some(&hashid_from_bytes(&uexp_bytes)));
+        assert_eq!(ctx.inject_a_hashes.1.as_ref().ok(), Some(&hashid_from_bytes(&uasset_bytes)));
         
         // Inject B: Should be a different hash after injection
         let mut uexp_bytes = std::fs::read(&ctx.inject_b_assets.0).unwrap();
         let mut uasset_bytes = std::fs::read(&ctx.inject_b_assets.1).unwrap();
         let result = super::inject_bytes(&bbscript_ref_bytes, &mut uexp_bytes, &mut uasset_bytes);
         result.unwrap();
-        assert_ne!(ctx.inject_b_hashes.0.as_ref().ok(), Some(&sha1_hash_bytes(&uexp_bytes)));
-        assert_ne!(ctx.inject_b_hashes.1.as_ref().ok(), Some(&sha1_hash_bytes(&uasset_bytes)));   
+        assert_ne!(ctx.inject_b_hashes.0.as_ref().ok(), Some(&hashid_from_bytes(&uexp_bytes)));
+        assert_ne!(ctx.inject_b_hashes.1.as_ref().ok(), Some(&hashid_from_bytes(&uasset_bytes)));   
     }
     
     #[test]
@@ -219,13 +219,13 @@ mod tests {
         // Inject A: Should be the same hash after injection
         let result = super::inject(&ctx.bbscript_ref, &ctx.inject_a_assets.0, &ctx.inject_a_assets.1);
         result.unwrap();
-        assert_eq!(ctx.inject_a_hashes.0.as_ref().ok(), sha1_hash_file(&ctx.inject_a_assets.0).as_ref().ok());
-        assert_eq!(ctx.inject_a_hashes.1.as_ref().ok(), sha1_hash_file(&ctx.inject_a_assets.1).as_ref().ok());
+        assert_eq!(ctx.inject_a_hashes.0.as_ref().ok(), hashid_from_file(&ctx.inject_a_assets.0).as_ref().ok());
+        assert_eq!(ctx.inject_a_hashes.1.as_ref().ok(), hashid_from_file(&ctx.inject_a_assets.1).as_ref().ok());
         
         // Inject B: Should be a different hash after injection
         let result = super::inject(&ctx.bbscript_ref, &ctx.inject_b_assets.0, &ctx.inject_b_assets.1);
         result.unwrap();
-        assert_ne!(ctx.inject_b_hashes.0.as_ref().ok(), sha1_hash_file(&ctx.inject_b_assets.0).as_ref().ok());
-        assert_ne!(ctx.inject_b_hashes.1.as_ref().ok(), sha1_hash_file(&ctx.inject_b_assets.1).as_ref().ok());
+        assert_ne!(ctx.inject_b_hashes.0.as_ref().ok(), hashid_from_file(&ctx.inject_b_assets.0).as_ref().ok());
+        assert_ne!(ctx.inject_b_hashes.1.as_ref().ok(), hashid_from_file(&ctx.inject_b_assets.1).as_ref().ok());
     }
 }

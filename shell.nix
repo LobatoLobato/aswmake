@@ -20,30 +20,3 @@ in
 
     RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
   }
-# shell.nix
-
-
-
-
-
-
-
-# pkgs.mkShell {
-#   nativeBuildInputs = with pkgs; [
-#     pkg-config
-#     cargo
-#     rustc
-#     (pkgs.rust-bin.stable.latest.default.override {
-#       extensions = [ "rust-src" "rust-analyzer" ];
-#     })
-#   ];
-
-#   buildInputs = with pkgs; [
-#     fuse
-#     # openssl
-#   ];
-
-#   # shellHook = ''
-#   #   export PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig:$PKG_CONFIG_PATH"
-#   # '';
-# }

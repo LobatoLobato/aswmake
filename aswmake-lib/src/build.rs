@@ -149,7 +149,7 @@ use suitest::{suite, suite_cfg};
 #[suite(build_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::{TargetGame, path::NoPath, util::sha1_hash_file};
+    use crate::{TargetGame, path::NoPath, util::hashid_from_file};
 
     use super::*;
     use std::{path::PathBuf, sync::Arc};
@@ -195,16 +195,16 @@ mod tests {
         
         compile(input_file, &uexp_path, &uasset_path, &out_dir, TargetGame::GGST, FileKind::BBSCRIPT, None).unwrap();
         
-        assert_eq!(sha1_hash_file(&uexp_path).ok(), sha1_hash_file(out_dir.join("BBS_FAU.uexp")).ok());
-        assert_eq!(sha1_hash_file(&uasset_path).ok(), sha1_hash_file(out_dir.join("BBS_FAU.uasset")).ok());
+        assert_eq!(hashid_from_file(&uexp_path).ok(), hashid_from_file(out_dir.join("BBS_FAU.uexp")).ok());
+        assert_eq!(hashid_from_file(&uasset_path).ok(), hashid_from_file(out_dir.join("BBS_FAU.uasset")).ok());
         
         let input_file = ctx.fixtures_dir_path.join("single/different/BBS_FAU.bbs");
         let out_dir = ctx.out_dir.join("single/different");
         
         compile(input_file, &uexp_path, &uasset_path, &out_dir, TargetGame::GGST, FileKind::BBSCRIPT, None).unwrap();
         
-        assert_ne!(sha1_hash_file(&uexp_path).ok(), sha1_hash_file(out_dir.join("BBS_FAU.uexp")).ok());
-        assert_ne!(sha1_hash_file(&uasset_path).ok(), sha1_hash_file(out_dir.join("BBS_FAU.uasset")).ok());
+        assert_ne!(hashid_from_file(&uexp_path).ok(), hashid_from_file(out_dir.join("BBS_FAU.uexp")).ok());
+        assert_ne!(hashid_from_file(&uasset_path).ok(), hashid_from_file(out_dir.join("BBS_FAU.uasset")).ok());
     }
     
     #[test]
@@ -217,16 +217,16 @@ mod tests {
         
         compile(input_file, &uexp_path, &uasset_path, &out_dir, TargetGame::GGST, FileKind::PAC, None).unwrap();
         
-        assert_eq!(sha1_hash_file(&uexp_path).ok(), sha1_hash_file(out_dir.join("COL_FAU.uexp")).ok());
-        assert_eq!(sha1_hash_file(&uasset_path).ok(), sha1_hash_file(out_dir.join("COL_FAU.uasset")).ok());
+        assert_eq!(hashid_from_file(&uexp_path).ok(), hashid_from_file(out_dir.join("COL_FAU.uexp")).ok());
+        assert_eq!(hashid_from_file(&uasset_path).ok(), hashid_from_file(out_dir.join("COL_FAU.uasset")).ok());
         
         let input_file = ctx.fixtures_dir_path.join("single/different/COL_FAU.pac");
         let out_dir = ctx.out_dir.join("single/different");
         
         compile(input_file, &uexp_path, &uasset_path, &out_dir, TargetGame::GGST, FileKind::PAC, None).unwrap();
         
-        assert_ne!(sha1_hash_file(&uexp_path).ok(), sha1_hash_file(out_dir.join("COL_FAU.uexp")).ok());
-        assert_ne!(sha1_hash_file(&uasset_path).ok(), sha1_hash_file(out_dir.join("COL_FAU.uasset")).ok());
+        assert_ne!(hashid_from_file(&uexp_path).ok(), hashid_from_file(out_dir.join("COL_FAU.uexp")).ok());
+        assert_ne!(hashid_from_file(&uasset_path).ok(), hashid_from_file(out_dir.join("COL_FAU.uasset")).ok());
     }
     
     #[test]
@@ -251,7 +251,7 @@ mod tests {
             let out_path = out_dir.join(&rel_path);
             let ms_path = ctx.ms_dir.join(&rel_path);
             
-            assert_ne!(sha1_hash_file(out_path).ok(), sha1_hash_file(ms_path).ok());   
+            assert_ne!(hashid_from_file(out_path).ok(), hashid_from_file(ms_path).ok());   
         }
     }
     

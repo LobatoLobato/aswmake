@@ -93,7 +93,7 @@ use suitest::{suite, suite_cfg};
 #[suite(loc_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::{path::NoPath, util::sha1_hash_file};
+    use crate::{path::NoPath, util::hashid_from_file};
 
     use super::*;
     use std::sync::Arc;
@@ -146,11 +146,11 @@ mod tests {
     fn correctly_parses_locuexp_into_readable_format_and_into_json_dicts(ctx: Arc<Context>) {
         assert!(fs::exists(&ctx.loc_file_path_no_out_dir).unwrap());
         assert!(fs::metadata(&ctx.loc_file_path_no_out_dir).unwrap().len() > 0);
-        assert_eq!(sha1_hash_file(&ctx.loc_file_path_no_out_dir).ok(), sha1_hash_file(&ctx.ref_loc_file_path).ok());
+        assert_eq!(hashid_from_file(&ctx.loc_file_path_no_out_dir).ok(), hashid_from_file(&ctx.ref_loc_file_path).ok());
         
         assert!(fs::exists(&ctx.loc_file_path_out_dir).unwrap());
         assert!(fs::metadata(&ctx.loc_file_path_out_dir).unwrap().len() > 0);
-        assert_eq!(sha1_hash_file(&ctx.loc_file_path_out_dir).ok(), sha1_hash_file(&ctx.ref_loc_file_path).ok());
+        assert_eq!(hashid_from_file(&ctx.loc_file_path_out_dir).ok(), hashid_from_file(&ctx.ref_loc_file_path).ok());
     }
     
 }

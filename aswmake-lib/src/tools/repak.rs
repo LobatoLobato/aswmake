@@ -5,7 +5,7 @@ use itertools::Itertools;
 use rayon::iter::{IntoParallelRefIterator as _, ParallelBridge as _, ParallelIterator};
 use glob_match::glob_match;
 
-use crate::{AResult, error, path::Path, util::Sha1Hash};
+use crate::{AResult, error, path::Path, util::HashId};
 
 use strum::{EnumString};
 
@@ -16,18 +16,40 @@ pub use repak::Version;
 pub enum PakFileKind {
     Uexp,
     Uasset,
-    
-    #[strum(default)]
-    Other(String)
+    Other
 }
 
 pub struct PakFile<'a> {
-    pub hash: Sha1Hash,
+    reader: &'a PakReader,
+    pub hash: HashId,
     pub path: &'a std::path::Path,
     pub size: usize,
     pub kind: PakFileKind
 }
 
+impl<'a> PakFile <'a> {
+    fn new(path: &'a String, reader: &'a PakReader) -> AResult<PakFile<'a>> {
+        let kind = if let Some(ext) = path.as_path().extension() {
+            PakFileKind::from_str(&ext.to_string_lossy())?
+        } else { 
+            PakFileKind::Other
+        };
+        
+        Ok(PakFile {
+            reader,
+            path: path.as_path(), 
+            hash: 1, 
+            size: 1, 
+            kind 
+        })
+    }
+    pub fn query(&mut self) -> AResult<&Self> {
+        let buffer = self.reader.read_file(&self.path)?;
+        self.hash = crate::util::hashid_from_reader(std::io::Cursor::new(&buffer))?;
+        self.size = buffer.len();
+        Ok(self)
+    }
+}
 
 pub struct PakReader {
     pak: repak::PakReader,
@@ -35,7 +57,7 @@ pub struct PakReader {
     aes_key: aes::Aes256
 }
 
-pub type SimpleEntry<'a> = (Sha1Hash, &'a std::path::Path);
+pub type SimpleEntry<'a> = (HashId, &'a std::path::Path);
 
 impl PakReader {
     pub fn new(pak_path: impl Path, aes_key: &str) -> AResult<Self> {
@@ -51,6 +73,10 @@ impl PakReader {
         let pak = pak_builder.reader(&mut pak_bufreader)?;
         
         Ok(Self {pak, pak_path, aes_key})
+    }
+    
+    pub fn keep_files(&mut self, filters: &[&str]) {
+        self.pak.keep_files(filters);
     }
     
     pub fn unpack(
@@ -179,7 +205,9 @@ impl PakReader {
         self.list_simple_iter(filters).par_bridge().collect()
     }
     pub fn list_simple_iter<'a>(&'a self, filters: Option<&[&str]>) -> impl Iterator<Item = AResult<SimpleEntry<'a>>> {
-        self.list_iter(filters).map(|pf| pf.map(|pf| (pf.hash, pf.path)))
+        self.list_iter(filters).map(|pf| {
+            pf.map(|mut pf| {pf.query().unwrap(); pf}).map(|pf| (pf.hash, pf.path))
+        })
     }
     pub fn list_iter<'a>(&'a self, filters: Option<&[&str]>) -> impl Iterator<Item = AResult<PakFile<'a>>> {
         let filter = move |file_path: &'a String| match filters {
@@ -187,28 +215,15 @@ impl PakReader {
             None => Some(file_path)
         };
            
-        self.pak.files_ref().into_iter().filter_map(move |file_path| filter(file_path))
-            .map(move |path| -> AResult<PakFile<'_>> {
-                let mut thread_file = Self::create_buf_reader(&self.pak_path)?;
-                let mut buffer = vec![];
-                self.pak.read_file(&path, &mut thread_file, &mut buffer)?;
-                
-                let hash = crate::util::sha1_hash_reader(std::io::Cursor::new(&buffer))?;
-                let size = buffer.len();
-                let kind = if let Some(ext) = path.as_path().extension() {
-                    PakFileKind::from_str(&ext.to_string_lossy())?
-                } else { 
-                    PakFileKind::Other(String::new())
-                };
-                
-                Ok(PakFile {path: path.as_path(), hash, size, kind })
-            })
+        self.pak.files_ref().into_iter()
+            .filter_map(move |file_path| filter(file_path))
+            .map(move |path| PakFile::new(path, self))
     }
     
     pub fn read_file(&self, file_path: impl Path) -> AResult<Vec<u8>> {
         let mut buffer = vec![];
         let mut pak_bufreader = Self::create_buf_reader(&self.pak_path)?;
-        self.pak.read_file(&file_path.as_path().to_string_lossy(), &mut pak_bufreader, &mut buffer)?;
+        self.pak.read_file(&&file_path.as_path().to_string_lossy(), &mut pak_bufreader, &mut buffer)?;
         Ok(buffer)
     }
     
@@ -228,7 +243,7 @@ impl PakReader {
             .zip_longest(pak_list).all(|z| {
                 let itertools::EitherOrBoth::Both(df, pf) = z else { return false; };
                 let rel_path = df.path().strip_prefix(&dir_path.as_path()).unwrap();
-                let hash = crate::util::sha1_hash_file(df.path()).unwrap();
+                let hash = crate::util::hashid_from_file(df.path()).unwrap();
                 
                 pf.0 == hash && pf.1 == rel_path       
             })
@@ -282,7 +297,7 @@ mod tests {
     use std::{path::PathBuf, sync::Arc};
     use suitest::before_all;
 
-    use crate::util::sha1_hash_file;
+    use crate::{path::Path, util::{HashId, hashid_from_file}};
     
     #[derive(Debug)]
     struct Context {
@@ -306,44 +321,61 @@ mod tests {
     
     #[test]
     fn can_list_pak_file(ctx: Arc<Context>) {
-        let mut expected: Vec<(String, PathBuf)> = vec![
-            (String::from("8abc079520c2e28c7385e34ac1cd1e4e8fb31056"), "RED/Content/Localization/INT/REDGame.uasset".into()),
-            (String::from("c7324db8d442f9607b9118550976da84e080e204"), "RED/Content/Chara/FAU/Common/Data/BBS_FAUEF.uasset".into()),
-            (String::from("af3c7f6d712c520ba490a8fe49e3c2b99b982ef7"), "RED/Content/Chara/FAU/Common/Data/BBS_FAU.uasset".into()),
-            (String::from("d31b00f7283e6d10fba36d85fc6d230a84141c8b"), "RED/Content/Chara/FAU/Common/Data/BBS_FAU_BOSS.uasset".into()),
-            (String::from("5baff11588777b63891d32d49ddc4c411bf107be"), "RED/Content/Chara/FAU/Common/Data/409/BBS_FAUEF.uasset".into()),
-            (String::from("a95e526c1a11c697fab26e4c470e45a3f662978d"), "RED/Content/Chara/FAU/Common/Data/409/BBS_FAU.uasset".into()),
-            (String::from("11d332b18aeeca51b26c964f1eea8f612404cd79"), "RED/Content/Chara/FAU/Common/Data/409/BBS_FAU_BOSS.uasset".into()),
-            (String::from("64a5fff0949345c106393f40aebc58e28fd105cb"), "RED/Content/Chara/FAU/Common/Data/409/COL_FAU.uasset".into()),
-            (String::from("c5f428058f13334eb380e50ed549a61b1ffb710f"), "RED/Content/Chara/FAU/Common/Data/409/BBS_FAUEF_BOSS.uasset".into()),
-            (String::from("c118d88db7356cd9d1e1309814bc6c84cdd584c4"), "RED/Content/Chara/FAU/Common/Data/BBS_FAUEF_BOSS.uasset".into()),
-            (String::from("4f471984360146fd4d1f4dd0be8368774ee52372"), "RED/Content/Chara/FAU/Common/Data/COL_FAU.uasset".into()),
-            (String::from("130479f6d5d56fa1d32a58d80371f888541f6917"), "RED/Content/Chara/FAU/Common/Data/BBS_FAUEF.uexp".into()),
-            (String::from("b637fc816934b0fbc59de9c0c06d202003a8be69"), "RED/Content/Chara/FAU/Common/Data/409/BBS_FAUEF.uexp".into()),
-            (String::from("4ba11921843f01d9ddf8a076f87d50e09d6c373e"), "RED/Content/Chara/FAU/Common/Data/BBS_FAU_BOSS.uexp".into()),
-            (String::from("ecec9c7adcd6f8be9d8002652763ccb7cb94e89a"), "RED/Content/Chara/FAU/Common/Data/409/BBS_FAUEF_BOSS.uexp".into()),
-            (String::from("c16fec016fa054a0c3a64f95cd110af809355408"), "RED/Content/Chara/FAU/Common/Data/BBS_FAUEF_BOSS.uexp".into()),
-            (String::from("e83c6faec591e041b7bd2e8a17b9d44a03a643ff"), "RED/Content/Chara/FAU/Common/Data/409/BBS_FAU.uexp".into()),
-            (String::from("35ab98ed0d4b3fc90563b777e70e3ae836ed2281"), "RED/Content/Chara/FAU/Common/Data/409/BBS_FAU_BOSS.uexp".into()),
-            (String::from("018b6e60e3f01bdefe2a3b512e9248dec1cd8e1c"), "RED/Content/Chara/FAU/Common/Data/BBS_FAU.uexp".into()),
-            (String::from("991d9d84143d561f5c46bb035f56ced4863b6191"), "RED/Content/Chara/FAU/Common/Data/COL_FAU.uexp".into()),
-            (String::from("e07fac2bce905e21fc74322cd7c6c4e7b149b601"), "RED/Content/Chara/FAU/Common/Data/409/COL_FAU.uexp".into()),
-            (String::from("d988c554f720aa7bbb7e8d832db52fcbbd5a2cfb"), "RED/Content/Localization/INT/REDGame.uexp".into()),
+        let mut expected: Vec<(HashId, &std::path::Path)> = vec![
+            (0xe53cf262dc992f8b, "RED/Content/Localization/INT/REDGame.uasset".as_path()),
+            (0x7bdc7602c7ee0aaf, "RED/Content/Localization/INT/REDGame.uexp".as_path()),
+            (0xd33fcdf0a9c0357c, "RED/Content/Chara/FAU/Common/Data/BBS_FAUEF.uasset".as_path()),
+            (0xed81ca66cd1e61d3, "RED/Content/Chara/FAU/Common/Data/BBS_FAU.uasset".as_path()),
+            (0xce9fa6e7a5cafdd9, "RED/Content/Chara/FAU/Common/Data/BBS_FAUEF.uexp".as_path()),
+            (0xcc4ccd9328d04dba, "RED/Content/Chara/FAU/Common/Data/BBS_FAU_BOSS.uasset".as_path()),
+            (0xba392505e806eb96, "RED/Content/Chara/FAU/Common/Data/COL_FAU.uexp".as_path()),
+            (0xc62784251eec7c1f, "RED/Content/Chara/FAU/Common/Data/BBS_FAU_BOSS.uexp".as_path()),
+            (0x0574ba95cff7129e, "RED/Content/Chara/FAU/Common/Data/BBS_FAU.uexp".as_path()),
+            (0xbb585e32fa7f0109, "RED/Content/Chara/FAU/Common/Data/409/BBS_FAUEF.uasset".as_path()),
+            (0x5051152017604e5f, "RED/Content/Chara/FAU/Common/Data/409/BBS_FAU.uasset".as_path()),
+            (0xa632dd1e77192f39, "RED/Content/Chara/FAU/Common/Data/409/BBS_FAUEF.uexp".as_path()),
+            (0x22c128bbbacbb77c, "RED/Content/Chara/FAU/Common/Data/409/BBS_FAU_BOSS.uasset".as_path()),
+            (0x8a53b3ef08e59c72, "RED/Content/Chara/FAU/Common/Data/409/COL_FAU.uexp".as_path()),
+            (0x5034b91c85493cd9, "RED/Content/Chara/FAU/Common/Data/409/BBS_FAU_BOSS.uexp".as_path()),
+            (0x448ceb1b17cced1d, "RED/Content/Chara/FAU/Common/Data/409/BBS_FAU.uexp".as_path()),
+            (0xf537acf7f8164a3c, "RED/Content/Chara/FAU/Common/Data/409/BBS_FAUEF_BOSS.uasset".as_path()),
+            (0x2b3b11c9c9a70e5d, "RED/Content/Chara/FAU/Common/Data/409/BBS_FAUEF_BOSS.uexp".as_path()),
+            (0xd58c151dbeac3bbc, "RED/Content/Chara/FAU/Common/Data/409/COL_FAU.uasset".as_path()),
+            (0xcd1346e12d43386f, "RED/Content/Chara/FAU/Common/Data/BBS_FAUEF_BOSS.uasset".as_path()),
+            (0xfdb08e5db0dad355, "RED/Content/Chara/FAU/Common/Data/BBS_FAUEF_BOSS.uexp".as_path()),
+            (0x3fa32008409f3299, "RED/Content/Chara/FAU/Common/Data/COL_FAU.uasset".as_path()),
         ];
         let reader = super::PakReader::new(
             &ctx.pakchunk_path, 
             crate::TargetGame::GGST.aes_key()
         ).unwrap();
         
-        let mut list = reader.list(None).unwrap().into_iter()
-            .map(|pf| (hex::encode(pf.hash), pf.path.to_path_buf()))
-            .collect::<Vec<(String, PathBuf)>>();
+        let mut list = reader.list_simple(None).unwrap();
+        
         expected.sort();
         list.sort();
         
-        assert_eq!(expected, list);
+        assert_eq!(list, expected);
     }
     
+    #[test]
+    fn can_list_filtered_pak_file(ctx: Arc<Context>) {
+        let mut expected: Vec<(HashId, &std::path::Path)> = vec![
+            (0x8a53b3ef08e59c72, "RED/Content/Chara/FAU/Common/Data/409/COL_FAU.uexp".as_path()),
+            (0xd58c151dbeac3bbc, "RED/Content/Chara/FAU/Common/Data/409/COL_FAU.uasset".as_path()),
+        ];
+        let reader = super::PakReader::new(
+            &ctx.pakchunk_path, 
+            crate::TargetGame::GGST.aes_key()
+        ).unwrap();
+        
+        let mut list = reader.list_simple(Some(&["**/409/COL_*"])).unwrap();
+        
+        expected.sort();
+        list.sort();
+        
+        assert_eq!(list, expected);
+    }
     
     #[test]
     fn validate_succeeds_when_pak_content_matches_dir_content(ctx: Arc<Context>) {
@@ -431,7 +463,7 @@ mod tests {
         );
         result.unwrap();
         
-        assert_eq!(sha1_hash_file(&packed_path).ok(), sha1_hash_file(&ctx.pakchunk_path).ok());
+        assert_eq!(hashid_from_file(&packed_path).ok(), hashid_from_file(&ctx.pakchunk_path).ok());
         let _ = std::fs::remove_file(packed_path);
     }
     

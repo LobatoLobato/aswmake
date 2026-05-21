@@ -362,7 +362,7 @@ use suitest::{suite, suite_cfg};
 #[suite(bbs_rs)]
 #[suite_cfg(sequential = true, verbose = false)]
 mod tests {
-    use crate::{TargetGame, path::NoPath, util::sha1_hash_file};
+    use crate::{TargetGame, path::NoPath, util::hashid_from_file};
 
     use super::*;
     use std::{path::PathBuf, sync::Arc};
@@ -404,8 +404,8 @@ mod tests {
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());
         std::fs::exists(&parsed_bbscript_path).unwrap();
         assert_eq!(
-            sha1_hash_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
-            sha1_hash_file(parsed_bbscript_path).ok()
+            hashid_from_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
+            hashid_from_file(parsed_bbscript_path).ok()
         )
     }
     
@@ -417,8 +417,8 @@ mod tests {
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());
         std::fs::exists(&parsed_bbscript_path).unwrap();
         assert_eq!(
-            sha1_hash_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
-            sha1_hash_file(parsed_bbscript_path).ok()
+            hashid_from_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
+            hashid_from_file(parsed_bbscript_path).ok()
         )
     }
 }
