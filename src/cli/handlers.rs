@@ -74,9 +74,7 @@ pub fn ms(cfg: &mut crate::cfg::ToolConfig, command: &cli::MsCommands) -> anyhow
         }
         cli::MsCommands::Mount { game, mount_point } => {
             let cwd = std::env::current_dir()?;
-            let mount_point = mount_point.absolute().or_else(||{
-                crate::cfg::ProjectConfig::load(cwd.join("aswmake.toml")).ok().map(|c| cwd.join(c.ms_dir))
-            }).unwrap_or(cwd.join("ms_fs"));
+            let mount_point = mount_point.absolute().unwrap_or(cwd.join(game));
             
             if let Some(pak) = cfg.paks.remove(game) {
                 println!("Loading pak file...");
