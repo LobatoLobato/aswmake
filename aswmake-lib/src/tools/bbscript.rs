@@ -2,14 +2,50 @@ use crate::path::Path;
 
 use super::*;
 
-declare_tool!(BBSCRIPT);
-
-pub fn parse(bbscript_bin_path: impl Path, out_file: impl Path, game: crate::TargetGame) -> ToolResult {
-    BBSCRIPT!("parse", "--overwrite", "--game", game.lcname(), bbscript_bin_path.as_path(), out_file.as_path())
+pub fn parse(bbscript_bin_path: impl Path, out_file: impl Path, game: crate::TargetGame) -> AResult<()> {
+    let bin_path = bbscript_bin_path.absolute_file().or(Err(crate::error::InvalidFilePath(bbscript_bin_path)))?;
+    let out_file = out_file.absolute().or(Err(crate::error::InvalidFilePath(out_file)))?;
+    crate::bbscript::parse(
+        game.to_supported_game(),
+        &mut std::fs::File::open(bin_path)?,
+        &mut std::fs::File::create(out_file)?,
+        None, None,
+        false,
+        12
+    )?;
+    Ok(())
 }
 
-pub fn rebuild(input_file: impl Path, out_bbscript_bin_path: impl Path, game: crate::TargetGame) -> ToolResult {
-    BBSCRIPT!("rebuild", "-o", "--game", game.lcname(), input_file.as_path(), out_bbscript_bin_path.as_path())
+pub fn parse_bytes<R>(mut uexp_bytes: R, game: crate::TargetGame) -> AResult<Vec<u8>>
+where R: std::io::Read {
+    crate::bbscript::parse_bytes(
+        game.to_supported_game(),
+        &mut uexp_bytes,
+        None, None,
+        false,
+        12
+    )
+}
+
+pub fn rebuild(input_file: impl Path, out_bbscript_bin_path: impl Path, game: crate::TargetGame) -> AResult<()> {
+    let input_file = input_file.absolute_file().or(Err(crate::error::InvalidFilePath(input_file)))?;
+    let out_bin = out_bbscript_bin_path.absolute().or(Err(crate::error::InvalidFilePath(out_bbscript_bin_path)))?;
+    
+    crate::bbscript::rebuild(
+        game.to_supported_game(), 
+        std::fs::File::open(input_file)?, 
+        &mut std::fs::File::create(out_bin)?, 
+        false
+    )?;
+    Ok(())
+}
+
+pub fn rebuild_bytes<R: std::io::Read>(input_bytes: R, game: crate::TargetGame) -> AResult<Vec<u8>> {
+    crate::bbscript::rebuild_bytes(
+        game.to_supported_game(), 
+        input_bytes, 
+        false
+    )
 }
 
 #[cfg(test)]

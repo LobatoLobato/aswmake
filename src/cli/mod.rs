@@ -30,7 +30,7 @@ pub enum MsCommands {
     Add { game: String, pak_path: String},
     Remove { game: String },
     Update { game: String },
-    Link { game: String },
+    Mount { game: String, mount_point: Option<String> },
 }
 
 impl MsCommands {
@@ -39,7 +39,7 @@ impl MsCommands {
             MsCommands::Add { game, .. } => game,
             MsCommands::Remove { game } => game,
             MsCommands::Update { game } => game,
-            MsCommands::Link { game, .. } => game,
+            MsCommands::Mount { game, .. } => game,
         };
         
         (key.parse::<aswmake_lib::TargetGame>().is_ok(), key)

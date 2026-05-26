@@ -12,8 +12,9 @@ use crate::{tools, util};
 use crate::path::{OptionalPath, Path};
 use crate::parsers::loc::Loc;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BBS {
+    output_len: usize,
     move_set: IndexMap<String, Move>
 }
 
@@ -45,7 +46,8 @@ impl BBS {
         }
         
         let mut bbs = Self {
-            move_set: IndexMap::new()
+            move_set: IndexMap::new(),
+            output_len: 0
         };
         
         if let Ok(file) = std::fs::File::open(bbs_path) {
@@ -71,6 +73,55 @@ impl BBS {
         Ok(bbs)
     }
     
+    pub fn parse_bytes<R: std::io::Read + std::io::Seek> (
+        uexp_bytes: R,
+        target_game: crate::TargetGame,
+        loc: Option<&Loc>
+    ) -> AResult<BBS> {
+        use std::io::BufRead;
+        let extracted_bytes = tools::bbspack::extract_bytes(uexp_bytes)?;
+        let bytes = bbscript::parse_bytes(
+            target_game.to_supported_game(), 
+            &mut extracted_bytes.as_slice(), 
+            None, None,
+            false,
+            12
+        )?;
+        let mut bbs = Self {
+            move_set: IndexMap::new(),
+            output_len: bytes.len()
+        };
+        
+        
+        let mut current_move: Option<Move> = None;
+        
+        for line in std::io::Cursor::new(bytes).lines() {
+            let line = line?;
+            if regex_is_match!(r"((addMove:)|(beginState:))", &line)  {
+                let id = Move::parse_id(&line);
+                current_move = bbs.move_set.swap_remove(id).or_else(|| Some(Move::new(&line, loc)));
+            } else if let Some(mv) = current_move.take_if(|_| regex_is_match!(r"((endMove:)|(endState:))", &line)) {
+                bbs.move_set.insert(mv.id.clone(), mv);
+            } else if let Some(mv) = &mut current_move { mv.try_parse(&line); }     
+        }
+        
+        if bbs.move_set.len() == 0 {
+            return Err(anyhow::Error::msg("Parsed move set is empty"));
+        }
+        
+        
+        bbs.move_set.iter_mut().for_each(|(_, m)| m.finish());
+        Ok(bbs)
+    }
+    pub fn apply_loc(&mut self, loc: &Loc) {
+        for mv in self.move_set.values_mut() {
+            mv.name = loc.move_loc_get_owned(&mv.id).take_if(|_| !mv.id.contains("NmlAtk"));
+        }
+    }
+    
+    pub fn bytes_len(&self) -> usize {
+        self.output_len
+    }
     pub fn render(&self) -> String {
         use itertools::Itertools; 
         let mut moves = self.move_set.values().filter(|mv| mv.has_impl()).sorted_by_key(|mv| {

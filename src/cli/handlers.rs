@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use aswmake_lib::path::Path;
+use aswmake_lib::path::{OptionalPath, Path};
 use strum::VariantNames as _;
 
-use crate::cli;
+use crate::{cli, compiler::Compiler, context, m_s};
 
 pub fn new(cfg: &mut crate::cfg::ToolConfig) -> anyhow::Result<()> {
     use inquire::{Text, Select};
@@ -58,26 +58,60 @@ pub fn ms(cfg: &mut crate::cfg::ToolConfig, command: &cli::MsCommands) -> anyhow
     
     match command {
         cli::MsCommands::Add { game, pak_path } => {
-            let ms_path = cfg.ms_dir().join(&game);
-            let target_game = game.parse::<aswmake_lib::TargetGame>()?;
-            cli::ops::m_s(&pak_path, PathBuf::from(&ms_path), target_game)?;
-            cfg.paks.insert(game.to_owned(), crate::cfg::GamePak::new(pak_path, ms_path)?);
+            let inode_size_index = m_s::PakFilesystem::new(
+                pak_path.to_path_buf(), 
+                context::new()
+            )?.generate_size_index(None)?;
+            
+            cfg.paks.insert(game.to_owned(), crate::cfg::GamePak::new(pak_path, inode_size_index)?);
             
             cfg.store()?;
         },
         cli::MsCommands::Remove { game } => {
-            if let Some(pak) = cfg.paks.remove(game) {
-                std::fs::remove_dir_all(pak.ms_dir)?;
+            if let Some(_) = cfg.paks.remove(game) {
                 cfg.store()?;    
             }
         }
-        cli::MsCommands::Link { game } => {
-            cli::ops::link_ms(cfg.ms_dir().join(game), game)?;
+        cli::MsCommands::Mount { game, mount_point } => {
+            let cwd = std::env::current_dir()?;
+            let mount_point = mount_point.absolute().or_else(||{
+                crate::cfg::ProjectConfig::load(cwd.join("aswmake.toml")).ok().map(|c| cwd.join(c.ms_dir))
+            }).unwrap_or(cwd.join("ms_fs"));
+            
+            if let Some(pak) = cfg.paks.remove(game) {
+                println!("Loading pak file...");
+                let mut fs = m_s::PakFilesystem::new(
+                    pak.path, 
+                    context::new()
+                )?;
+                
+                println!("Initializing file system...");
+                fs.init(None, Some(pak.inode_size_index))?;
+                
+                println!("File system mounted at {}", mount_point.display());
+                let session = fs.mount(&mount_point)?;
+                let (tx, rx) = std::sync::mpsc::channel();
+                
+                ctrlc::set_handler(move || { let _ = tx.send(()); })?;
+                
+                if rx.recv().is_ok() {
+                    println!("Unmounting file system...");
+                    session.umount_and_join()?;    
+                    println!("Removing {}...", mount_point.display());
+                    std::fs::remove_dir(mount_point)?;
+                }
+                
+                println!("Done :)")
+            }
         }
         cli::MsCommands::Update { game } => {
-            if let Some(pak) = cfg.paks.get(game) {
-                let target_game = game.parse::<aswmake_lib::TargetGame>()?;
-                cli::ops::m_s(&pak.path, cfg.ms_dir().join(game), target_game)?;
+            if let Some(pak) = cfg.paks.get_mut(game) {
+                pak.inode_size_index = m_s::PakFilesystem::new(
+                    pak.path.clone(), 
+                    context::new()
+                )?.generate_size_index(None)?;
+                
+                cfg.store()?;
             } else {
                 return Err(anyhow::format_err!("No registered pak path for {game}"));
             }
@@ -92,6 +126,12 @@ pub fn build(cfg_root_path: impl Path) -> anyhow::Result<()> {
     let compiled_dir = cfg.build_dir.join("compiled");
     let package_path = cfg.build_dir.join(&cfg.project_name).with_extension("pak");
     
-    cli::ops::compile_and_package(&cfg, compiled_dir, package_path)
+    let compiler = Compiler::new(cfg.game_pak_path, context::new())?;
+    
+    compiler.compile(cfg.src_dir, &compiled_dir)?;
+    
+    compiler.package(compiled_dir, package_path);
+    Ok(())
+    // cli::ops::compile_and_package(&cfg, compiled_dir, package_path)
 }
 

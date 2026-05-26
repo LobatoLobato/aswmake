@@ -5,9 +5,18 @@ use std::{
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use crate::{AResult, error, path::Path};
 
-pub fn extract_bytes(uexp_bytes: &Vec<u8>) -> AResult<Vec<u8>> {
-    let contained_file = &uexp_bytes[UEXP_FILE_START..uexp_bytes.len() - UEXP_FILE_END_PAD];
-    Ok(contained_file.to_vec())
+pub fn extracted_len(uexp_len: usize) -> usize {
+    uexp_len - UEXP_FILE_END_PAD - UEXP_FILE_START
+}
+
+pub fn extract_bytes<R: std::io::Read + std::io::Seek>(mut uexp_bytes: R) -> AResult<Vec<u8>> {
+        let total_len = uexp_bytes.seek(SeekFrom::End(0))?;
+        let contained_file_len = total_len - UEXP_FILE_END_PAD as u64 - UEXP_FILE_START as u64;
+        uexp_bytes.seek(SeekFrom::Start(UEXP_FILE_START as u64))?;
+        let mut buffer = vec![0; contained_file_len as usize];
+        uexp_bytes.read_exact(&mut buffer)?;
+    
+        Ok(buffer)
 }
 
 pub fn extract(uexp_path: impl Path, out_path: impl Path) -> AResult<()> {
@@ -19,7 +28,7 @@ pub fn extract(uexp_path: impl Path, out_path: impl Path) -> AResult<()> {
 
     uexp.read_to_end(&mut uexp_bytes)?;
     
-    file.write_all(&extract_bytes(&uexp_bytes)?)?;
+    file.write_all(&extract_bytes(std::io::Cursor::new(uexp_bytes))?)?;
 
     Ok(())
 }
@@ -174,7 +183,7 @@ mod tests {
         let expected_file_path = ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript");     
         let uexp_bytes = std::fs::read(uexp_path).unwrap();
         
-        let result = super::extract_bytes(&uexp_bytes).unwrap();
+        let result = super::extract_bytes(std::io::Cursor::new(uexp_bytes)).unwrap();
         
         assert_eq!(Some(hashid_from_bytes(&result)), hashid_from_file(expected_file_path).ok());
     }

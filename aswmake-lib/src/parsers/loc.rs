@@ -1,11 +1,11 @@
 use lazy_regex::*;
-use std::{collections::HashMap, fs, io::{BufRead}, path::{PathBuf}};
+use std::{collections::HashMap, fs, io::BufRead};
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use crate::{AResult, path::{OptionalPath, Path}, tools};
 
 use crate::error;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Loc {
    move_loc_map: HashMap<String, String>
 }
@@ -17,11 +17,12 @@ impl super::Parser for Loc {
 }
 
 impl Loc {
-    fn utf16le_file_reader(path: &PathBuf) -> std::io::BufReader<encoding_rs_io::DecodeReaderBytes<fs::File, Vec<u8>>> {
-        let loc_f = fs::File::open(path).unwrap();
+    fn utf16le_reader<R>(bytes: R) -> std::io::BufReader<encoding_rs_io::DecodeReaderBytes<R, Vec<u8>>> 
+    where R: std::io::Read
+    {
         let decoder = DecodeReaderBytesBuilder::new()
                 .encoding(Some(encoding_rs::UTF_16LE))
-                .build(loc_f);
+                .build(bytes);
         
         std::io::BufReader::new(decoder)
     }
@@ -39,7 +40,14 @@ impl Loc {
             tools::bbspack::extract(&loc_uexp_path, &loc_file_path)?;
         }
         
-        let mut loc_it = Loc::utf16le_file_reader(&loc_file_path).lines();
+        let loc_f = fs::File::open(loc_file_path).unwrap();
+        
+        parse_bytes(loc_f)
+    }
+    
+    pub fn parse_bytes<R: std::io::Read + std::io::Seek>(uexp_bytes: R) -> AResult<Self> {
+        let extracted_uexp = tools::bbspack::extract_bytes(uexp_bytes)?;
+        let mut loc_it = Loc::utf16le_reader(extracted_uexp.as_slice()).lines();
         let mut loc_inst = Self { move_loc_map: HashMap::new() };
         
         while let Some(Ok(line)) = loc_it.next() {
@@ -63,6 +71,7 @@ impl Loc {
         
         Ok(loc_inst)
     }
+    
     pub fn move_loc_get(&self, key: &str) -> Option<&String> {
         if self.move_loc_map.contains_key(key) {
             return self.move_loc_map.get(key);
@@ -82,6 +91,9 @@ impl Loc {
     }
 }
 
+pub fn parse_bytes<R: std::io::Read + std::io::Seek>(bytes: R) -> AResult<Loc> {
+    return Loc::parse_bytes(bytes);
+}
 pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> AResult<Loc> {
     return Loc::parse(loc_uexp_path, out_dir);
 }
@@ -96,7 +108,7 @@ mod tests {
     use crate::{path::NoPath, util::hashid_from_file};
 
     use super::*;
-    use std::sync::Arc;
+    use std::{path::PathBuf, sync::Arc};
     use suitest::{before_all};
     use tempfile;
     

@@ -3,6 +3,9 @@ use clap::Parser as _;
 mod cli;
 mod error;
 mod cfg;
+mod m_s;
+mod context;
+mod compiler;
 
 fn main() -> anyhow::Result<()> {
     let mut cfg = cfg::ToolConfig::load()?;

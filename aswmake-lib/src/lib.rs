@@ -32,9 +32,6 @@ pub enum TargetGame {
 }
 
 impl TargetGame {
-    fn lcname(&self) -> String {
-        return format!("{self:?}").to_lowercase();
-    }
     pub fn aes_key(&self) -> &str {
         self.get_str("aes_key").unwrap_or_default()
     }
