@@ -23,9 +23,9 @@ pub struct PakFileContext {
 
 mod error;
 
-pub type BackgroundSession<Ctx> = FileSystemService<FileSystemHost<PakFilesystem<'static, Ctx>, CoarseGuard>>;
-impl<Ctx: Context<'static>> PakFilesystem<'static, Ctx> {
-    fn make_file_info(kind: &EntryKind<'static, Ctx::Fk>) -> winfsp::filesystem::FileInfo {
+pub type BackgroundSession = FileSystemService<FileSystemHost<PakFilesystem<'static>, CoarseGuard>>;
+impl PakFilesystem<'static> {
+    fn make_file_info(kind: &EntryKind) -> winfsp::filesystem::FileInfo {
         let mut info = winfsp::filesystem::FileInfo::default();
         match kind {
             EntryKind::Directory => {
@@ -43,7 +43,7 @@ impl<Ctx: Context<'static>> PakFilesystem<'static, Ctx> {
     }
 
     fn resolve_path(
-        registry: &InodeRegistry<'static, Ctx::Fk>,
+        registry: &InodeRegistry,
         path: &winfsp::U16CStr,
     ) -> Option<INodeNo> {
         let path_str = path.to_string_lossy();
@@ -62,7 +62,7 @@ impl<Ctx: Context<'static>> PakFilesystem<'static, Ctx> {
         Some(current)
     }
 
-    pub fn mount(self, mount_point: impl AsRef<std::path::Path>) -> FspResult<BackgroundSession<Ctx>> {
+    pub fn mount(self, mount_point: impl AsRef<std::path::Path>) -> FspResult<BackgroundSession> {
         use winfsp::host::{CoarseGuard, FileSystemHost, VolumeParams};
 
         let init = winfsp::winfsp_init_or_die();
@@ -108,7 +108,7 @@ impl<Ctx: Context<'static>> PakFilesystem<'static, Ctx> {
     }
 }
 
-impl<Ctx: Context<'static>> FileSystemContext for PakFilesystem<'static, Ctx> {
+impl FileSystemContext for PakFilesystem<'static> {
     type FileContext = PakFileContext;
 
     fn get_security_by_name(
@@ -172,11 +172,11 @@ impl<Ctx: Context<'static>> FileSystemContext for PakFilesystem<'static, Ctx> {
         if !self.cache.read().contains_key(&context.ino) {
             let registry = self.registry.read();
             let entry = registry.by_ino.get(&context.ino).ok_or(error::STATUS_OBJECT_NAME_NOT_FOUND)?;
-            let EntryKind::File { ref paths, ref parser_kind, .. } = entry.kind else {
+            let EntryKind::File { ref asset, .. } = entry.kind else {
                 return Err(error::STATUS_INVALID_PARAMETER);
             };
 
-            let content = self.parse_file(parser_kind, paths).map_err(|_| error::STATUS_IO_DEVICE_ERROR)?;
+            let content = self.parse_file(asset).map_err(|_| error::STATUS_IO_DEVICE_ERROR)?;
             self.cache.write().insert(context.ino, content);
         }
 

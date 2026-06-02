@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use aswmake_lib::tools::repak::{PakFileKind};
+use aswmake_lib::assets::Asset;
 
 #[cfg(target_os = "linux")]
 pub use fuser::INodeNo;
@@ -9,17 +9,15 @@ pub use fuser::INodeNo;
 pub struct INodeNo(pub u64);
 
 #[derive(Debug, Clone)]
-pub enum EntryKind<'a, PK: super::FKind> {
+pub enum EntryKind {
     Directory,
-    File { 
-        parser_kind: Option<PK>,
-        paths: EntryKindOriginPathMap<'a>, 
+    File {
+        asset: Asset,
         size: Option<u64>
     },
 }
-pub type EntryKindOriginPathMap<'a> = HashMap<PakFileKind, (&'a std::path::Path, u64)>;
 
-impl<'a, PK: super::FKind> EntryKind<'a, PK> {
+impl EntryKind {
     #[cfg(target_os = "linux")]
     pub(super) fn as_fuser_filetype(&self) -> fuser::FileType {
         match self {
@@ -27,11 +25,11 @@ impl<'a, PK: super::FKind> EntryKind<'a, PK> {
             EntryKind::File { .. } => fuser::FileType::RegularFile,
         }
     }
-    
+
     pub(super) fn is_dir(&self) -> bool {
         matches!(self, Self::Directory)
     }
-    
+
     pub(super) fn size(&self) -> Option<u64> {
         match self {
             Self::Directory => Some(0),
@@ -41,16 +39,16 @@ impl<'a, PK: super::FKind> EntryKind<'a, PK> {
 }
 
 #[derive(Debug, Clone)]
-pub struct InodeEntry<'a, PK: super::FKind> {
+pub struct InodeEntry {
     #[cfg(target_os = "linux")]
     pub ino: INodeNo,
     pub name: ustr::Ustr,
-    pub kind: EntryKind<'a, PK>,
+    pub kind: EntryKind,
 }
 
-pub struct InodeRegistry<'a, PK: super::FKind> {
+pub struct InodeRegistry {
     // For lookups via Inode (used by getattr, read, readdir)
-    pub by_ino: HashMap<INodeNo, InodeEntry<'a, PK>>,
+    pub by_ino: HashMap<INodeNo, InodeEntry>,
 
     // For lookups via Parent Inode + Component Name (used by lookup)
     pub by_hierarchy: HashMap<(INodeNo, ustr::Ustr), INodeNo>, // Maps (parent_ino, name) -> child_ino
@@ -59,7 +57,7 @@ pub struct InodeRegistry<'a, PK: super::FKind> {
     pub children: HashMap<INodeNo, Vec<INodeNo>>, // Maps parent_ino -> Vec<child_inodes>
 }
 
-impl<'a, PK: super::FKind> InodeRegistry<'a, PK> {
+impl InodeRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
             by_ino: HashMap::new(),
@@ -77,7 +75,7 @@ impl<'a, PK: super::FKind> InodeRegistry<'a, PK> {
         registry
     }
 
-    pub fn register_pak_file(&mut self, flat_path: &PathBuf, file_kind: EntryKind<'a, PK>, next_ino: &mut u64) {
+    pub fn register_pak_file(&mut self, flat_path: &PathBuf, file_kind: EntryKind, next_ino: &mut u64) {
         let path = flat_path.as_path();
         let mut current_parent_ino = INodeNo(1);
 
@@ -89,13 +87,13 @@ impl<'a, PK: super::FKind> InodeRegistry<'a, PK> {
             let is_last_component = index == total_components - 1;
 
             let lookup_key = (current_parent_ino, component_name.clone());
-            
+
             if let Some(&existing_ino) = self.by_hierarchy.get(&lookup_key) {
                 current_parent_ino = existing_ino;
             } else {
                 let assigned_ino = INodeNo(*next_ino);
                 *next_ino += 1;
-                
+
                 let final_kind = if is_last_component {
                     file_kind.clone()
                 } else {

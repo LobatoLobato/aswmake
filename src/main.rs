@@ -10,7 +10,7 @@ mod compiler;
 fn main() -> anyhow::Result<()> {
     let mut cfg = cfg::ToolConfig::load()?;
     let args = cli::Parser::parse();
-    
+
     match &args.command {
         Some(cli::Commands::New) => cli::handlers::new(&mut cfg),
         Some(cli::Commands::Ms { command }) => cli::handlers::ms(&mut cfg, command),

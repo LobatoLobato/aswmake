@@ -6,72 +6,65 @@ use crate::{AResult, path::{OptionalPath, Path}, tools};
 use crate::error;
 
 #[derive(Debug, Default)]
-pub struct Loc {
+pub struct LocMap {
    move_loc_map: HashMap<String, String>
 }
 
-impl super::Parser for Loc {
-    fn ms_filter() -> &'static str {
-        return "{}/Localization/INT/REDGame.uexp";
-    }
-}
-
-impl Loc {
-    fn utf16le_reader<R>(bytes: R) -> std::io::BufReader<encoding_rs_io::DecodeReaderBytes<R, Vec<u8>>> 
+impl LocMap {
+    fn utf16le_reader<R>(bytes: R) -> std::io::BufReader<encoding_rs_io::DecodeReaderBytes<R, Vec<u8>>>
     where R: std::io::Read
     {
         let decoder = DecodeReaderBytesBuilder::new()
                 .encoding(Some(encoding_rs::UTF_16LE))
                 .build(bytes);
-        
+
         std::io::BufReader::new(decoder)
     }
-    
+
     pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> AResult<Self> {
         let loc_uexp_path = loc_uexp_path.as_path();
         let out_dir = out_dir.as_path().or(loc_uexp_path.parent()).unwrap();
         let loc_file_name = loc_uexp_path.file_name().ok_or(error::InvalidFilePath(loc_uexp_path))?;
         let loc_file_path = out_dir.join(loc_file_name).with_extension("loc");
-        
-        
+
         std::fs::create_dir_all(&out_dir).unwrap();
-        
+
         if loc_uexp_path.exists() {
             tools::bbspack::extract(&loc_uexp_path, &loc_file_path)?;
         }
-        
+
         let loc_f = fs::File::open(loc_file_path).unwrap();
-        
+
         parse_bytes(loc_f)
     }
-    
+
     pub fn parse_bytes<R: std::io::Read + std::io::Seek>(uexp_bytes: R) -> AResult<Self> {
         let extracted_uexp = tools::bbspack::extract_bytes(uexp_bytes)?;
-        let mut loc_it = Loc::utf16le_reader(extracted_uexp.as_slice()).lines();
+        let mut loc_it = LocMap::utf16le_reader(extracted_uexp.as_slice()).lines();
         let mut loc_inst = Self { move_loc_map: HashMap::new() };
-        
+
         while let Some(Ok(line)) = loc_it.next() {
             let Some(caps) = regex_captures!(r"CMCR_(\w+)", &line) else { continue; };
             let Some(Ok(next_line)) = loc_it.next() else { continue; };
-            
+
             let mut move_cmcr = caps.1.to_string();
             if loc_inst.move_loc_map.contains_key(&move_cmcr) {
                 move_cmcr = format!("{move_cmcr}_");
             }
-            
+
             let mut move_name = regex_replace_all!(r"(\^m((Atk)|(Btn)))|;", next_line.trim(), "").into_owned();
             while move_name.contains("(Hold)") {
                 move_name = regex_replace_all!(r"(.+\s*)\(Hold\)", &move_name, |_, m: &str| { format
-                    !("[{}]", m.trim()) 
+                    !("[{}]", m.trim())
                 }).into_owned();
             }
 
             loc_inst.move_loc_map.insert(move_cmcr, move_name.replace('"', ""));
         }
-        
+
         Ok(loc_inst)
     }
-    
+
     pub fn move_loc_get(&self, key: &str) -> Option<&String> {
         if self.move_loc_map.contains_key(key) {
             return self.move_loc_map.get(key);
@@ -91,11 +84,11 @@ impl Loc {
     }
 }
 
-pub fn parse_bytes<R: std::io::Read + std::io::Seek>(bytes: R) -> AResult<Loc> {
-    return Loc::parse_bytes(bytes);
+pub fn parse_bytes<R: std::io::Read + std::io::Seek>(bytes: R) -> AResult<LocMap> {
+    return LocMap::parse_bytes(bytes);
 }
-pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> AResult<Loc> {
-    return Loc::parse(loc_uexp_path, out_dir);
+pub fn parse(loc_uexp_path: impl Path, out_dir: Option<impl Path>) -> AResult<LocMap> {
+    return LocMap::parse(loc_uexp_path, out_dir);
 }
 
 #[cfg(test)]
@@ -111,25 +104,25 @@ mod tests {
     use std::{path::PathBuf, sync::Arc};
     use suitest::{before_all};
     use tempfile;
-    
+
     #[derive(Debug)]
     struct Context {
-        loc_inst: Loc,
+        loc_inst: LocMap,
         _fixtures_dir: tempfile::TempDir,
         loc_file_path_no_out_dir: PathBuf,
         loc_file_path_out_dir: PathBuf,
         ref_loc_file_path: PathBuf
     }
-    
+
     #[before_all]
     fn setup() -> (Arc<Context>, ()){
         let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures(Some("loc"));
         let out_dir = tmp_fixtures_dir_path.join("output");
-        
-        let _loc_no_out_dir = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), NoPath).unwrap();
-        let loc_out_dir = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), Some(&out_dir)).unwrap();        
-        
-        (Arc::new(Context { 
+
+        let _loc_no_out_dir = LocMap::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), NoPath).unwrap();
+        let loc_out_dir = LocMap::parse(&tmp_fixtures_dir_path.join("REDGame.uexp"), Some(&out_dir)).unwrap();
+
+        (Arc::new(Context {
             loc_inst: loc_out_dir,
             _fixtures_dir: tmp_fixtures_dir,
             loc_file_path_no_out_dir: tmp_fixtures_dir_path.join("REDGame.loc"),
@@ -137,7 +130,7 @@ mod tests {
             ref_loc_file_path: tmp_fixtures_dir_path.join("REDGame.ref.loc")
         }), ())
     }
-    
+
     #[test]
     fn can_get_localized_move_by_bbs_id(ctx: Arc<Context>) {
         let test_cases = [
@@ -153,16 +146,16 @@ mod tests {
             assert_eq!(ctx.loc_inst.move_loc_get(id), Some(&String::from(expected_name)));
         }
     }
-    
+
     #[test]
     fn correctly_parses_locuexp_into_readable_format_and_into_json_dicts(ctx: Arc<Context>) {
         assert!(fs::exists(&ctx.loc_file_path_no_out_dir).unwrap());
         assert!(fs::metadata(&ctx.loc_file_path_no_out_dir).unwrap().len() > 0);
         assert_eq!(hashid_from_file(&ctx.loc_file_path_no_out_dir).ok(), hashid_from_file(&ctx.ref_loc_file_path).ok());
-        
+
         assert!(fs::exists(&ctx.loc_file_path_out_dir).unwrap());
         assert!(fs::metadata(&ctx.loc_file_path_out_dir).unwrap().len() > 0);
         assert_eq!(hashid_from_file(&ctx.loc_file_path_out_dir).ok(), hashid_from_file(&ctx.ref_loc_file_path).ok());
     }
-    
+
 }

@@ -106,6 +106,7 @@ dependencies = [
  "color-print",
  "confy",
  "ctrlc",
+ "debug-log",
  "directories",
  "dotenvy",
  "enum_dispatch",
@@ -141,7 +142,9 @@ dependencies = [
  "anyhow",
  "bbscript",
  "byteorder",
+ "const-fnv1a-hash",
  "const_format",
+ "debug-log",
  "derivative",
  "dir-diff",
  "encoding_rs",
@@ -427,6 +430,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "const-fnv1a-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32b13ea120a812beba79e34316b3942a857c86ec1593cb34f27bb28272ce2cca"
+
+[[package]]
 name = "const_format"
 version = "0.2.36"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -545,6 +554,15 @@ dependencies = [
  "dispatch2",
  "nix 0.31.3",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "debug-log"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caf861b629ec23fc562cccc8b47cc98a54d192ecf4e7b575ce30659d8c814c3a"
+dependencies = [
+ "once_cell",
 ]
 
 [[package]]

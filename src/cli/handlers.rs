@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use aswmake_lib::path::{OptionalPath, Path};
 use strum::VariantNames as _;
 
-use crate::{cli, compiler::Compiler, context, m_s};
+use crate::{cfg::ProjectConfig, cli, compiler::Compiler, context, m_s};
 
 pub fn new(cfg: &mut crate::cfg::ToolConfig) -> anyhow::Result<()> {
     use inquire::{Select, Text};
@@ -46,9 +46,9 @@ pub fn new(cfg: &mut crate::cfg::ToolConfig) -> anyhow::Result<()> {
     );
 
     if use_scaffold {
-        cli::ops::scaffold(&cfg, &pcfg)?;
+        cli::ops::scaffold(&pcfg)?;
     } else {
-        cli::ops::scaffold_min(&cfg, &pcfg)?;
+        cli::ops::scaffold_min(&pcfg)?;
     }
 
     Ok(())
@@ -84,7 +84,10 @@ pub fn ms(cfg: &mut crate::cfg::ToolConfig, command: &cli::MsCommands) -> anyhow
         }
         cli::MsCommands::Mount { game, mount_point } => {
             let cwd = std::env::current_dir()?;
-            let mount_point = mount_point.absolute().unwrap_or(cwd.join(game));
+            let mount_point = mount_point.absolute().unwrap_or_else(|| ProjectConfig::load(cwd.join("aswmake.toml"))
+                .map(|c| cwd.join(c.ms_dir))
+                .unwrap_or(cwd.join(game))
+            );
 
             if let Some(pak) = cfg.paks.remove(game) {
                 println!("Loading pak file...");
@@ -94,6 +97,7 @@ pub fn ms(cfg: &mut crate::cfg::ToolConfig, command: &cli::MsCommands) -> anyhow
                 fs.init(None, Some(pak.inode_size_index))?;
 
                 println!("File system mounted at {}", mount_point.display());
+                #[allow(unused_mut)]
                 let mut session = fs.mount(&mount_point)?;
                 let (tx, rx) = std::sync::mpsc::channel();
 

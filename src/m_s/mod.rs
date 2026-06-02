@@ -1,5 +1,6 @@
+use aswmake_lib::assets::{self, Asset};
 use aswmake_lib::path::Path;
-use aswmake_lib::{AResult, TargetGame};
+use aswmake_lib::AResult;
 
 
 use aswmake_lib::tools::repak::{PakFile, PakFileKind, PakReader};
@@ -13,54 +14,27 @@ use std::collections::HashMap;
 
 mod inode_registry;
 use inode_registry::*;
-pub use inode_registry::EntryKindOriginPathMap;
+
+use crate::context::Context;
 
 #[cfg(target_os = "linux")]
 mod fuser_fs_impl;
 #[cfg(target_os = "windows")]
 mod winfsp_fs_impl;
 
-#[allow(dead_code)]
-pub trait FKind: std::fmt::Debug + Clone + Copy + Send + Sync + 'static {
-    fn variants() -> &'static [Self];
-
-    fn needs_processing(&self) -> bool;
-    fn glob_match(&self, path: &str) -> bool;
-    fn glob(&self) -> &'static str;
-
-    fn compile_glob_match(&self, path: &str) -> bool;
-    fn compile_glob(&self) -> Option<&'static str>;
-
-    fn path_template(&self) -> &str;
-
-}
-
-pub trait Context<'a>: Send + Sync + 'static {
-    type Fk: FKind;
-    fn target_game(&self) -> TargetGame;
-
-    fn on_before_init(&self, reader: &'a PakReader) -> AResult<()>;
-    fn on_match(&self, reader: &'a PakReader, kind: &Self::Fk, paths: &EntryKindOriginPathMap<'a>) -> AResult<()>;
-    fn on_query_size(&self, reader: &'a PakReader, kind: &Self::Fk, paths: &EntryKindOriginPathMap<'a>) -> AResult<Option<u64>>;
-    fn on_fs_initialized(&mut self, reader: &PakReader) -> AResult<()>;
-
-    fn try_parse(&self, reader: &PakReader, kind: &Self::Fk, paths: &EntryKindOriginPathMap<'a>) -> AResult<Vec<u8>>;
-    fn try_compile(&self, input_bytes: Vec<u8>, input_rel_path: &std::path::Path, reader: &PakReader, kind: &Self::Fk) -> AResult<Vec<(std::path::PathBuf, Vec<u8>)>>;
-}
-
 pub type INodeSizeIndex = HashMap<u64, u64>;
 
-pub struct PakFilesystem<'a, Ctx: Context<'a>> {
+pub struct PakFilesystem<'a> {
     pak_reader: &'a PakReader,
-    registry: Arc<RwLock<InodeRegistry<'a, Ctx::Fk>>>,
+    registry: Arc<RwLock<InodeRegistry>>,
     cache: Arc<RwLock<HashMap<INodeNo, Vec<u8>>>>,
-    context: Arc<RwLock<Ctx>>
+    context: Arc<RwLock<Context>>
 }
 
-impl<'a: 'static, Ctx: Context<'a>> PakFilesystem<'a, Ctx> {
+impl<'a: 'static> PakFilesystem<'a> {
     pub fn new(
         pak_path: PathBuf,
-        context: Ctx
+        context: Context
     ) -> anyhow::Result<Self> {
         use parking_lot::RwLock;
         use PakReader;
@@ -83,7 +57,7 @@ impl<'a: 'static, Ctx: Context<'a>> PakFilesystem<'a, Ctx> {
         let mut index = INodeSizeIndex::new();
 
         for (ino, entry) in self.registry.read().by_ino.iter() {
-            if let InodeEntry{kind: EntryKind::File { parser_kind, size, .. }, ..} = &entry && parser_kind.is_some() {
+            if let InodeEntry{kind: EntryKind::File { asset, size, .. }, ..} = &entry && !asset.is_passthrough() {
                 index.insert(ino.0, size.unwrap_or(1));
             }
         }
@@ -115,47 +89,37 @@ impl<'a: 'static, Ctx: Context<'a>> PakFilesystem<'a, Ctx> {
         chunked_list.par_bridge().for_each_with(entries.clone(), |entries, files| {
             let any_path = files[0].path;
 
-            let fk_list: Vec<&Ctx::Fk> = Ctx::Fk::variants().iter().filter(|fk| {
-                files.iter().any(|f| fk.needs_processing() && fk.glob_match(&f.path.to_string_lossy()))
-            }).collect();
+            let ctor_list = assets::AssetConstructors.iter().filter(|ac| {
+                files.iter().any(|f| ac.needs_processing() && ac.glob_match(&f.path.to_string_lossy()))
+            }).collect_vec();
 
-            for &fk in fk_list.iter() {
-                let file_path = fk.path_template()
+            let target_game = self.context.read().target_game();
+
+            for ctor in ctor_list.iter() {
+                let file_path = ctor.path_template()
                     .replace("${parent}", &any_path.parent().unwrap().to_string_lossy())
                     .replace("${file_stem}", &any_path.file_stem().unwrap().to_string_lossy())
                     .to_path_buf();
 
-                let paths = files.iter().filter_map(|pf| {
-                    if let Some(ext) = pf.path.extension() {
-                        let Ok(kind) = ext.to_string_lossy().parse::<PakFileKind>() else { return None; };
-                        Some((kind, (pf.path, pf.size)))
-                    } else {
-                        None
-                    }
-                }).collect();
+                let asset = ctor.create_asset(any_path, target_game);
 
-                self.context.read().on_match(self.pak_reader, fk, &paths).unwrap();
+                self.context.read().on_match(self.pak_reader, &asset).unwrap();
                 let size = if size_index.is_none() {
-                    self.context.read().on_query_size(self.pak_reader, fk, &paths).unwrap()
+                    self.context.read().on_query_size(self.pak_reader, &asset).unwrap()
                 } else {
                     None
                 };
 
-                let entry = EntryKind::File {
-                    paths,
-                    size,
-                    parser_kind: Some(*fk)
-                };
+                let entry = EntryKind::File { size, asset };
                 entries.write().push((file_path, entry));
             }
 
-            if fk_list.len() > 0 { return; }
+            if ctor_list.len() > 0 { return; }
             for file in files {
-                let (file_path, paths) = (PathBuf::from(file.path), HashMap::from([(PakFileKind::Other, (file.path, file.size))]));
+                let file_path = PathBuf::from(file.path);
                 let entry = EntryKind::File {
-                    paths,
                     size: Some(file.size),
-                    parser_kind: None
+                    asset: assets::passthrough::create(&file_path, target_game)
                 };
                 entries.write().push((file_path, entry));
             }
@@ -181,12 +145,11 @@ impl<'a: 'static, Ctx: Context<'a>> PakFilesystem<'a, Ctx> {
         Ok(())
     }
 
-    fn parse_file(&self, fkind: &Option<Ctx::Fk>, paths: &EntryKindOriginPathMap<'a>) -> anyhow::Result<Vec<u8>> {
-        if let Some(kind) = fkind && kind.needs_processing() {
-            self.context.read().try_parse(&self.pak_reader, kind, paths)
+    fn parse_file(&self, asset: &Asset) -> anyhow::Result<Vec<u8>> {
+        if !asset.is_passthrough() {
+            self.context.read().try_parse(&self.pak_reader, asset)
         } else {
-            let (file_path, _) = paths.get(&PakFileKind::Other).unwrap();
-            let bytes = self.pak_reader.read_file(file_path)?;
+            let bytes = self.pak_reader.read_file(assets::passthrough::path(asset))?;
             Ok(bytes)
         }
     }

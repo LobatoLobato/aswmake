@@ -10,33 +10,27 @@ use lazy_regex::*;
 use crate::{AResult, error};
 use crate::{tools, util};
 use crate::path::{OptionalPath, Path};
-use crate::parsers::loc::Loc;
+use crate::parsers::loc_map::LocMap;
 
 #[derive(Debug, Default)]
-pub struct BBS {
+pub struct MoveList {
     output_len: usize,
     move_set: IndexMap<String, Move>
 }
 
-impl super::Parser for BBS  {
-    fn ms_filter() -> &'static str {
-        return "**/Chara/**/Data/**/BBS_*";
-    }
-}
-
-impl BBS {
+impl MoveList {
     pub fn parse(
         bbs_uexp_path: impl Path,
-        out_dir: Option<impl Path>, 
+        out_dir: Option<impl Path>,
         target_game: crate::TargetGame,
-        loc: Option<&Loc>
-    ) -> AResult<BBS> {
+        loc: Option<&LocMap>
+    ) -> AResult<MoveList> {
         use std::io::BufRead;
         let bbs_uexp_path = bbs_uexp_path.as_path();
         let bbs_file_name = bbs_uexp_path.file_name().ok_or(error::InvalidFilePath(bbs_uexp_path))?;
         let bbs_file_name = regex_replace!(r"(_\d+)?\.uexp", &bbs_file_name.to_string_lossy(), ".bbs").to_string();
         let out_dir = out_dir.as_path().or(bbs_uexp_path.parent()).unwrap();
-        
+
         let bbs_path = out_dir.join(bbs_file_name);
         let bbscript_path = bbs_path.with_extension("bbscript");
         if bbs_uexp_path.exists() {
@@ -44,45 +38,45 @@ impl BBS {
             tools::bbscript::parse(&bbscript_path, &bbs_path, target_game)?;
             let _ = std::fs::remove_file(bbscript_path);
         }
-        
+
         let mut bbs = Self {
             move_set: IndexMap::new(),
             output_len: 0
         };
-        
+
         if let Ok(file) = std::fs::File::open(bbs_path) {
             let mut current_move: Option<Move> = None;
-            
+
             for line in std::io::BufReader::new(file).lines() {
                 let line = line?;
-                
+
                 if regex_is_match!(r"((addMove:)|(beginState:))", &line)  {
                     let id = Move::parse_id(&line);
                     current_move = bbs.move_set.swap_remove(id).or_else(|| Some(Move::new(&line, loc)));
                 } else if let Some(mv) = current_move.take_if(|_| regex_is_match!(r"((endMove:)|(endState:))", &line)) {
                     bbs.move_set.insert(mv.id.clone(), mv);
-                } else if let Some(mv) = &mut current_move { mv.try_parse(&line); }     
+                } else if let Some(mv) = &mut current_move { mv.try_parse(&line); }
             }
-            
+
             if bbs.move_set.len() == 0 {
                 return Err(anyhow::Error::msg("Parsed move set is empty"));
             }
         }
-        
+
         bbs.move_set.iter_mut().for_each(|(_, m)| m.finish());
         Ok(bbs)
     }
-    
+
     pub fn parse_bytes<R: std::io::Read + std::io::Seek> (
         uexp_bytes: R,
         target_game: crate::TargetGame,
-        loc: Option<&Loc>
-    ) -> AResult<BBS> {
+        loc: Option<&LocMap>
+    ) -> AResult<MoveList> {
         use std::io::BufRead;
         let extracted_bytes = tools::bbspack::extract_bytes(uexp_bytes)?;
         let bytes = bbscript::parse_bytes(
-            target_game.to_supported_game(), 
-            &mut extracted_bytes.as_slice(), 
+            target_game.to_supported_game(),
+            &mut extracted_bytes.as_slice(),
             None, None,
             false,
             12
@@ -91,10 +85,10 @@ impl BBS {
             move_set: IndexMap::new(),
             output_len: bytes.len()
         };
-        
-        
+
+
         let mut current_move: Option<Move> = None;
-        
+
         for line in std::io::Cursor::new(bytes).lines() {
             let line = line?;
             if regex_is_match!(r"((addMove:)|(beginState:))", &line)  {
@@ -102,43 +96,43 @@ impl BBS {
                 current_move = bbs.move_set.swap_remove(id).or_else(|| Some(Move::new(&line, loc)));
             } else if let Some(mv) = current_move.take_if(|_| regex_is_match!(r"((endMove:)|(endState:))", &line)) {
                 bbs.move_set.insert(mv.id.clone(), mv);
-            } else if let Some(mv) = &mut current_move { mv.try_parse(&line); }     
+            } else if let Some(mv) = &mut current_move { mv.try_parse(&line); }
         }
-        
+
         if bbs.move_set.len() == 0 {
             return Err(anyhow::Error::msg("Parsed move set is empty"));
         }
-        
-        
+
+
         bbs.move_set.iter_mut().for_each(|(_, m)| m.finish());
         Ok(bbs)
     }
-    pub fn apply_loc(&mut self, loc: &Loc) {
+    pub fn apply_loc(&mut self, loc: &LocMap) {
         for mv in self.move_set.values_mut() {
             mv.name = loc.move_loc_get_owned(&mv.id).take_if(|_| !mv.id.contains("NmlAtk"));
         }
     }
-    
+
     pub fn bytes_len(&self) -> usize {
         self.output_len
     }
     pub fn render(&self) -> String {
-        use itertools::Itertools; 
+        use itertools::Itertools;
         let mut moves = self.move_set.values().filter(|mv| mv.has_impl()).sorted_by_key(|mv| {
             if mv.has_flag("T_MOVEMENT_UNI") { 0 }
             else if mv.has_flag("T_MOVEMENT") { 1 }
             else if mv.has_flags(&["T_NORMAL", "!CS_JUMPING"]) { 2 }
-            else if mv.has_flags(&["T_NORMAL", "CS_JUMPING"]) { 3 } 
-            else if mv.has_flag("T_SPECIAL") { 4 } 
-            else if mv.has_flag("T_OVERDRIVE") { 5 } 
+            else if mv.has_flags(&["T_NORMAL", "CS_JUMPING"]) { 3 }
+            else if mv.has_flag("T_SPECIAL") { 4 }
+            else if mv.has_flag("T_OVERDRIVE") { 5 }
             else { 6 }
         }).collect::<Vec<&Move>>();
-        
+
         fn put_after<'a>(mset: &'a mut Vec<&Move>, k1: &str, k2: &str) {
-            if let Some(k1_index) = mset.iter().position(|m| m.id == k1) && 
+            if let Some(k1_index) = mset.iter().position(|m| m.id == k1) &&
                let Some(k2_index) = mset.iter().position(|m| m.id == k2) {
                 let v = mset.remove(k1_index);
-                mset.insert(k2_index, v);        
+                mset.insert(k2_index, v);
             }
         }
         put_after(&mut moves, "HomingJump", "NmlAtk5E");
@@ -147,27 +141,27 @@ impl BBS {
         put_after(&mut moves, "NmlAtkAirThrow", "ThrowExe");
         put_after(&mut moves, "NmlAtk5F", "NmlAtkAir5E");
         put_after(&mut moves, "NmlAtk6F", "NmlAtk5F");
-        
+
         let states = self.move_set.values().filter(|mv| !mv.has_impl())
             .sorted_by_key(|mv| (!mv.has_name()).then(|| mv.main_sprite()));
-        
-        let mut move_list = moves.iter().map(|a| *a).chain(states).filter(|m| { 
-            !m.is_empty() && 
-            !m.has_flag("DEBUG_EX") && 
+
+        let mut move_list = moves.iter().map(|a| *a).chain(states).filter(|m| {
+            !m.is_empty() &&
+            !m.has_flag("DEBUG_EX") &&
             m.main_sprite().is_some()
         });
-        
+
         format!("{{\n  {}\n}}", move_list.join(",\n  "))
     }
 }
 
 pub fn parse(
-    bbs_path: impl Path, 
-    out_dir: Option<impl Path>, 
-    target_game: crate::TargetGame, 
-    loc: Option<&Loc>
-) -> AResult<BBS> {
-    BBS::parse(bbs_path, out_dir, target_game, loc)
+    bbs_path: impl Path,
+    out_dir: Option<impl Path>,
+    target_game: crate::TargetGame,
+    loc: Option<&LocMap>
+) -> AResult<MoveList> {
+    MoveList::parse(bbs_path, out_dir, target_game, loc)
 }
 
 
@@ -182,7 +176,7 @@ impl PropValue {
     fn parse(value_str: &str) -> Vec<Self> {
         value_str.split(',').map(|v| {
             let v = v.trim();
-            
+
             if v.starts_with('(') && v.ends_with(')') {
                 PropValue::Const(v.trim_matches(['(', ')']).into())
             } else if v.ends_with(")") {
@@ -190,8 +184,8 @@ impl PropValue {
                 PropValue::Struct{kind: kind.into(), value: value.trim_end_matches(')').into() }
             } else if v.starts_with("s32'") {
                 PropValue::String(v[3..].trim_matches(['\'', '\'']).into())
-            } else if v.is_empty() { 
-                PropValue::Call 
+            } else if v.is_empty() {
+                PropValue::Call
             } else { PropValue::Const(v.to_string()) }
         }).collect()
     }
@@ -216,7 +210,7 @@ impl Display for Move {
     }
 }
 impl Move {
-    fn new(line: &str, loc: Option<&Loc>) -> Self {
+    fn new(line: &str, loc: Option<&LocMap>) -> Self {
         let id = Move::parse_id(line).to_string();
         let name = loc.and_then(|l| l.move_loc_get_owned(&id)).take_if(|_| !id.contains("NmlAtk"));
         Self {
@@ -227,13 +221,13 @@ impl Move {
             flags: HashSet::from_iter([id])
         }
     }
-    
+
     pub fn has_impl(&self) -> bool {
         !self.input.is_empty()
     }
     pub fn is_empty(&self) -> bool {
-        self.input.is_empty() && 
-        self.flags.len() == 1 && 
+        self.input.is_empty() &&
+        self.flags.len() == 1 &&
         self.sprites.len() == 0
     }
     pub fn has_name(&self) -> bool {
@@ -251,11 +245,11 @@ impl Move {
     pub fn main_sprite(&self) -> Option<&String> {
         self.sprites.iter().find(|s| *s != "keep" && *s != "null")
     }
-    
+
     fn parse_id(line: &str) -> &str {
         regex_captures!(r"s32'(.+?)'", line).unwrap().1
     }
-    
+
     fn try_parse(&mut self, line: &str) {
         use PropValue as PV;
         type ParserFn = fn(&mut Move, &str);
@@ -269,15 +263,15 @@ impl Move {
                 s.flags.insert("IS_FOLLOWUP".into());
             }),
         ]));
-        
+
         if let Some((f, value_str)) = line.trim().split_once(":").and_then(|(i, v)| PARSERS.get(i).map(|f| (f, v))) {
             f(self, value_str);
         }
     }
     fn parse_char_state(&mut self, line: &str) {
         if let Some(PropValue::Const(char_state)) = PropValue::parse_i(line, 0) {
-            self.flags.insert(format!("CS_{}", char_state));    
-        } 
+            self.flags.insert(format!("CS_{}", char_state));
+        }
     }
     fn parse_move_type(&mut self, line: &str) {
         if let Some(PropValue::Const(move_type)) = PropValue::parse_i(line, 0) {
@@ -288,61 +282,61 @@ impl Move {
         if let Some(PropValue::Const(input)) = PropValue::parse_i(line, 0) {
             self.input.push(regex_remove!(r"INPUT_(PRESS_)?", &input).into())
         }
-    } 
+    }
     fn parse_flag(&mut self, line: &str) {
         if let Some(PropValue::Const(flag)) = PropValue::parse_i(line, 0) {
-            self.flags.insert(flag);    
-        } 
+            self.flags.insert(flag);
+        }
     }
     fn parse_sprite(&mut self, line: &str) {
         if let Some(PropValue::String(sprite)) = PropValue::parse_i(line, 0) {
-            self.sprites.push(sprite);    
+            self.sprites.push(sprite);
         }
     }
-    
+
     fn finish(&mut self) {
         let mut input: VecDeque<String> = VecDeque::new();
         for x in &self.input {
             if let Some(token) = TOKEN_DICT.get(x.as_str()) {
                 if !token.to.is_empty() {
                     let to = token.to.to_string();
-                    if token.prefix { input.push_front(to); } 
+                    if token.prefix { input.push_front(to); }
                     else { input.push_back(to); }
                 }
             } else {
                 input.push_back(x.clone());
             }
         }
-        
+
         let mut additional_flags: Vec<String> = vec![];
         for x in &self.flags {
             if let Some(token) = TOKEN_DICT.get(x.as_str()) {
                 let to = token.to.to_string();
-                if token.prefix { input.push_front(to); } 
+                if token.prefix { input.push_front(to); }
                 else { input.push_back(to); }
-                
+
                 if !token.force_name.is_empty() { self.name = Some(token.force_name.to_string()); }
-                
-                additional_flags.extend(token.set_flags.iter().map(|v| String::from(*v))); 
+
+                additional_flags.extend(token.set_flags.iter().map(|v| String::from(*v)));
             }
         }
         self.flags.extend(additional_flags);
-        if self.has_flag("HomingJump") { 
-            self.name = None; 
+        if self.has_flag("HomingJump") {
+            self.name = None;
             self.flags.remove("T_MOVEMENT");
         }
-        
+
         if input.len() == 1 && input[0].len() == 1 && !input[0].parse::<u8>().is_ok(){
             input.push_front("5".to_string())
         }
-        
+
         self.input = input.into_iter().collect();
     }
-    
+
     fn render(&self) -> String {
         let rendered_input = self.input.iter().join("");
         let name_display = self.name.as_ref().unwrap_or(&rendered_input);
-        
+
         let mut fields = Vec::new();
         if !rendered_input.is_empty() {
             fields.push(format!("\"input\": \"{rendered_input}\""));
@@ -350,8 +344,8 @@ impl Move {
         if let Some(sprite) = self.main_sprite() {
             fields.push(format!("\"sprite\": \"{sprite}\""));
         }
-        
-        format!("\"{name_display}( {} )\": {{ {} }}", self.id, fields.join(", "))   
+
+        format!("\"{name_display}( {} )\": {{ {} }}", self.id, fields.join(", "))
     }
 }
 
@@ -385,13 +379,13 @@ static TOKEN_DICT: LazyLock<HashMap<&str, Token>> = LazyLock::new(|| HashMap::fr
     ("NOT_1", util::make!(Token { to: "" })),
     ("NOT_3", util::make!(Token { to: "" })),
     ("ANY_UP", util::make!(Token { to: "" })),
-    
+
     // Char State Tokens
     ("CS_JUMPING", util::make!(Token { to: "j.", prefix: true })),
-    
+
     // Other Properties
     ("IS_FOLLOWUP", util::make!(Token { to: ">", prefix: true })),
-    
+
     // ID Tokens
     ("HomingJump", util::make!(Token{ to: "jump", set_flags: &["T_NORMAL"] })),
     ("CmnActJump", util::make!(Token{ to: "jump", set_flags: &["T_MOVEMENT_UNI"] })),
@@ -419,56 +413,56 @@ mod tests {
     use std::{path::PathBuf, sync::Arc};
     use suitest::{before_all};
     use tempfile;
-    
+
     #[derive(Debug)]
     struct Context {
-        loc_inst: Loc,
+        loc_inst: LocMap,
         _fixtures_dir: tempfile::TempDir,
         fixtures_dir_path: PathBuf,
         bbs_uexp_path: PathBuf,
         move_list_ref_path: PathBuf,
         out_dir: PathBuf
     }
-    
+
     #[before_all]
     fn setup() -> (Arc<Context>, ()){
         let (tmp_fixtures_dir, tmp_fixtures_dir_path) = crate::tests::make_temp_fixtures(Some("bbs"));
         let out_dir = tmp_fixtures_dir_path.join("output");
-        let loc = Loc::parse(&tmp_fixtures_dir_path.join("REDGame.ref.uexp"), Some(&out_dir)).unwrap();
-        
-        (Arc::new(Context { 
+        let loc = LocMap::parse(&tmp_fixtures_dir_path.join("REDGame.ref.uexp"), Some(&out_dir)).unwrap();
+
+        (Arc::new(Context {
             loc_inst: loc,
             _fixtures_dir: tmp_fixtures_dir,
             bbs_uexp_path: tmp_fixtures_dir_path.join("BBS_FAU.ref.uexp"),
             move_list_ref_path: tmp_fixtures_dir_path.join("move_list.ref.json"),
             fixtures_dir_path: tmp_fixtures_dir_path,
             out_dir: out_dir,
-            
+
         }), ())
     }
-    
+
     #[test]
     fn can_parse_to_out_dir_and_render_move_list(ctx: Arc<Context>) {
-        let bbs = BBS::parse(&ctx.bbs_uexp_path, Some(&ctx.out_dir), TargetGame::GGST, Some(&ctx.loc_inst)).unwrap();
+        let bbs = MoveList::parse(&ctx.bbs_uexp_path, Some(&ctx.out_dir), TargetGame::GGST, Some(&ctx.loc_inst)).unwrap();
         let parsed_bbscript_path = &ctx.out_dir.join("BBS_FAU.bbscript");
-        
+
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());
         std::fs::exists(&parsed_bbscript_path).unwrap();
         assert_eq!(
-            hashid_from_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
+            hashid_from_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(),
             hashid_from_file(parsed_bbscript_path).ok()
         )
     }
-    
+
     #[test]
     fn can_parse_to_default_dir_and_render_move_list(ctx: Arc<Context>) {
-        let bbs = BBS::parse(&ctx.bbs_uexp_path, NoPath, TargetGame::GGST, Some(&ctx.loc_inst)).unwrap();
+        let bbs = MoveList::parse(&ctx.bbs_uexp_path, NoPath, TargetGame::GGST, Some(&ctx.loc_inst)).unwrap();
         let parsed_bbscript_path = &&ctx.fixtures_dir_path.join("BBS_FAU.bbscript");
-        
+
         assert_eq!(bbs.render(), std::fs::read_to_string(&ctx.move_list_ref_path).unwrap());
         std::fs::exists(&parsed_bbscript_path).unwrap();
         assert_eq!(
-            hashid_from_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(), 
+            hashid_from_file(&ctx.fixtures_dir_path.join("BBS_FAU.ref.bbscript")).ok(),
             hashid_from_file(parsed_bbscript_path).ok()
         )
     }

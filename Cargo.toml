@@ -31,6 +31,7 @@ itertools = { workspace = true }
 rayon = { workspace = true }
 ctrlc = "3.5.2"
 enum_dispatch = "0.3.13"
+debug-log = "0.3.1"
 
 
 [target.'cfg(target_os = "linux")'.dependencies]
