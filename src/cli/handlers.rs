@@ -145,7 +145,7 @@ pub fn build(cfg_root_path: impl Path) -> anyhow::Result<()> {
 
     compiler.compile(cfg.src_dir, &compiled_dir)?;
 
-    compiler.package(compiled_dir, package_path);
+    compiler.package(compiled_dir, package_path, cfg.install_dir)?;
+    
     Ok(())
-    // cli::ops::compile_and_package(&cfg, compiled_dir, package_path)
 }

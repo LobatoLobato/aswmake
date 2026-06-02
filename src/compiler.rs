@@ -50,7 +50,7 @@ impl<'a: 'static> Compiler<'a> {
                     std::fs::write(artifact_path, bytes)?;
                 }
             } else {
-
+                cprintln!("<yellow>Compiling {}</yellow>...", rel_path.display());
                 let artifact_path = artifacts_dir.join(rel_path);
                 std::fs::create_dir_all(artifact_path.parent().unwrap())?;
                 std::fs::copy(file.path(), artifact_path)?;
@@ -60,7 +60,31 @@ impl<'a: 'static> Compiler<'a> {
         Ok(())
     }
 
-    pub fn package(&self, _artifacts_dir: impl Path, _package_path: impl Path) {
-        // aswmake_lib::build::package(cfg.target_game, package_path, compiled_dir, cfg.install_dir.as_ref())?;
+    pub fn package(&self, artifacts_dir: impl Path, package_path: impl Path, install_dir: Option<impl Path>) -> AResult<()> {
+        let artifacts_dir = artifacts_dir.absolute_dir()?;
+        let package_path = package_path.absolute()?;
+        let sig_file_path = package_path.with_extension("sig");
+        let build_dir = package_path.parent().unwrap();
+        let target_game = self.context.read().target_game();
+        
+        std::fs::create_dir_all(&build_dir)?;
+        
+        aswmake_lib::tools::repak::pack(
+            target_game.aes_key(), 
+            target_game.version(), 
+            target_game.mount_point(), 
+            artifacts_dir, 
+            &package_path
+        )?;
+        std::fs::copy(aswmake_lib::assets::sig::SIG_FILE.path(), &sig_file_path)?;
+        
+        let package_name = package_path.file_stem().unwrap().to_string_lossy().into_owned();
+        if let Some(install_dir) = install_dir.map(|d| d.as_path().join(&package_name)) {
+            std::fs::create_dir_all(&install_dir)?;
+            std::fs::copy(&package_path, &install_dir.join(&package_name).with_extension("pak"))?;
+            std::fs::copy(&sig_file_path, &install_dir.join(&package_name).with_extension("sig"))?;
+        }
+        
+        Ok(())
     }
 }

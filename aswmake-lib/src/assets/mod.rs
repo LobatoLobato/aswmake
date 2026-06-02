@@ -148,4 +148,5 @@ define_assets! {
     audio;
 }
 
+pub mod sig;
 pub mod passthrough;
