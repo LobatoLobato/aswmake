@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use include_dir::{Dir, include_dir};
 use itertools::Itertools;
 
@@ -6,9 +6,7 @@ use aswmake_lib::path::Path;
 
 static TEMPLATE_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates");
 
-pub fn scaffold(project_cfg: &crate::cfg::ProjectConfig) -> anyhow::Result<()> {
-    let cwd = std::env::current_dir().unwrap();
-    let project_dir = cwd.join(&project_cfg.project_name);
+pub fn scaffold(project_cfg: &crate::cfg::ProjectConfig, project_dir: PathBuf) -> anyhow::Result<()> {
     let target_game = project_cfg.target_game.to_string();
     std::fs::create_dir_all(&project_dir)?;
 
@@ -25,9 +23,7 @@ pub fn scaffold(project_cfg: &crate::cfg::ProjectConfig) -> anyhow::Result<()> {
 
     Ok(())
 }
-pub fn scaffold_min(project_cfg: &crate::cfg::ProjectConfig) -> anyhow::Result<()> {
-    let cwd = std::env::current_dir().unwrap();
-    let project_dir = cwd.join(&project_cfg.project_name);
+pub fn scaffold_min(project_cfg: &crate::cfg::ProjectConfig, project_dir: PathBuf) -> anyhow::Result<()> {
 
     write_aswmake_toml(project_cfg, &project_dir)?;
     write_dotenv(project_cfg, project_dir)?;

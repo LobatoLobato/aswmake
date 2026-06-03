@@ -1,18 +1,24 @@
 use std::path::PathBuf;
 
 use aswmake_lib::path::{OptionalPath, Path};
+use color_print::cprintln;
+use path_clean::PathClean;
 use strum::VariantNames as _;
 
 use crate::{cfg::ProjectConfig, cli, compiler::Compiler, context, m_s};
 
-pub fn new(cfg: &mut crate::cfg::ToolConfig) -> anyhow::Result<()> {
+pub fn new(cfg: &mut crate::cfg::ToolConfig, path: &Option<String>) -> anyhow::Result<()> {
     use inquire::{Select, Text};
+    
+    let cwd = std::env::current_dir()?;
+    let project_dir = path.as_ref().map(|path| cwd.join(path).clean());
+    
     let project_name = Text::new("Project name:")
         .with_default("mod")
         .with_placeholder("mod")
         .prompt()?;
 
-    let project_dir = std::env::current_dir().unwrap().join(&project_name);
+    let project_dir = project_dir.unwrap_or_else(|| cwd.join(&project_name).clean());
     let use_scaffold = !project_dir.exists();
 
     if project_dir.is_dir() && project_dir.join("aswmake.toml").is_file() {
@@ -20,6 +26,9 @@ pub fn new(cfg: &mut crate::cfg::ToolConfig) -> anyhow::Result<()> {
         return Err(aswmake_lib::error::InvalidFilePath(project_name));
     }
 
+    cprintln!("<green>></green> Project dir: <cyan>{}</cyan>", project_dir.display());
+    
+    
     let target_game = Select::new(
         "Select the game the mod is for:",
         aswmake_lib::TargetGame::VARIANTS.to_vec(),
@@ -46,9 +55,9 @@ pub fn new(cfg: &mut crate::cfg::ToolConfig) -> anyhow::Result<()> {
     );
 
     if use_scaffold {
-        cli::ops::scaffold(&pcfg)?;
+        cli::ops::scaffold(&pcfg, project_dir)?;
     } else {
-        cli::ops::scaffold_min(&pcfg)?;
+        cli::ops::scaffold_min(&pcfg, project_dir)?;
     }
 
     Ok(())

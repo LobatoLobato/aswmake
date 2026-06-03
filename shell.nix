@@ -38,7 +38,6 @@ in pkgs.mkShell {
     AR_x86_64_pc_windows_msvc = "${pkgs.llvmPackages_latest.llvm}/bin/llvm-lib";
     
     shellHook = ''
-        # Função para compilar Windows
         build-win() {
             env NIX_CFLAGS_COMPILE="" NIX_LDFLAGS="" RUSTFLAGS="-C target-feature=+crt-static" cargo xwin build --release --target x86_64-pc-windows-msvc "$@"
         }

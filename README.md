@@ -43,13 +43,14 @@ Mounting a game's pak file to "./\<game\>" or "./\<path\>":
 ```bash
 aswmake ms mount <game> <path?>
 ```
-**Creating a new project**
-Just run:
+**Creating a new project**  
+This command needs the target game of your project to be already added as available for mounting  
+It will prompt you for the project name, target game and install path (your game's mods folder)
+
+It will scaffold a new project for \<target game\> in ./\<project name\> or \<path\> (\<path\> can be absolute or relative)
 ```bash
-aswmake new
+aswmake new <path?>
 ```
-and enter your mod name, target game and install_path (your game's mods folder)
-This will scaffold a new project in ./\<mod name\> for \<target_game\>
 
 **Building the project**
 ```bash

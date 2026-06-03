@@ -12,7 +12,7 @@ fn main() -> anyhow::Result<()> {
     let args = cli::Parser::parse();
 
     match &args.command {
-        Some(cli::Commands::New) => cli::handlers::new(&mut cfg),
+        Some(cli::Commands::New { path }) => cli::handlers::new(&mut cfg, path),
         Some(cli::Commands::Ms { command }) => cli::handlers::ms(&mut cfg, command),
         Some(cli::Commands::Build { path }) => cli::handlers::build(path.as_ref().unwrap_or(&String::from("."))),
         None => {

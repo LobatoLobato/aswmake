@@ -17,7 +17,7 @@ pub struct Parser {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    New,
+    New { path: Option<String> },
     Ms { 
         #[command(subcommand)]
         command: MsCommands
