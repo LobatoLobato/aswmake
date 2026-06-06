@@ -144,7 +144,7 @@ pub fn ms(cfg: &mut crate::cfg::ToolConfig, command: &cli::MsCommands) -> anyhow
     Ok(())
 }
 
-pub fn build(cfg_root_path: impl Path) -> anyhow::Result<()> {
+pub fn build(cfg_root_path: impl Path, install: bool) -> anyhow::Result<()> {
     let cfg = crate::cfg::ProjectConfig::load(cfg_root_path.as_path().join("aswmake.toml"))?;
 
     let compiled_dir = cfg.build_dir.join("compiled");
@@ -154,7 +154,15 @@ pub fn build(cfg_root_path: impl Path) -> anyhow::Result<()> {
 
     compiler.compile(cfg.src_dir, &compiled_dir)?;
 
-    compiler.package(compiled_dir, package_path, cfg.install_dir)?;
+    compiler.package(compiled_dir, &package_path)?;
+    
+    if install {
+        if let Some(install_dir) = cfg.install_dir {
+            compiler.install(package_path, install_dir)?;        
+        } else {
+            return Err(anyhow::anyhow!("Missing ASWM_INSTALL_DIR in project configuration (.env)"));
+        }
+    }
     
     Ok(())
 }

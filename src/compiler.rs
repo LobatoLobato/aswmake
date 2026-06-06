@@ -60,7 +60,7 @@ impl<'a: 'static> Compiler<'a> {
         Ok(())
     }
 
-    pub fn package(&self, artifacts_dir: impl Path, package_path: impl Path, install_dir: Option<impl Path>) -> AResult<()> {
+    pub fn package(&self, artifacts_dir: impl Path, package_path: impl Path) -> AResult<()> {
         let artifacts_dir = artifacts_dir.absolute_dir()?;
         let package_path = package_path.absolute()?;
         let sig_file_path = package_path.with_extension("sig");
@@ -78,12 +78,19 @@ impl<'a: 'static> Compiler<'a> {
         )?;
         std::fs::copy(aswmake_lib::assets::sig::SIG_FILE.path(), &sig_file_path)?;
         
+        Ok(())
+    }
+    
+    pub fn install(&self, package_path: impl Path, install_dir: impl Path) -> AResult<()>{
+        let install_dir = install_dir.absolute_dir()?;
+        let package_path = package_path.absolute()?;
         let package_name = package_path.file_stem().unwrap().to_string_lossy().into_owned();
-        if let Some(install_dir) = install_dir.map(|d| d.as_path().join(&package_name)) {
-            std::fs::create_dir_all(&install_dir)?;
-            std::fs::copy(&package_path, &install_dir.join(&package_name).with_extension("pak"))?;
-            std::fs::copy(&sig_file_path, &install_dir.join(&package_name).with_extension("sig"))?;
-        }
+        let sig_file_path = package_path.with_extension("sig");
+        let install_dir = install_dir.join(&package_name); 
+        
+        std::fs::create_dir_all(&install_dir)?;
+        std::fs::copy(&package_path, &install_dir.join(&package_name).with_extension("pak"))?;
+        std::fs::copy(&sig_file_path, &install_dir.join(&package_name).with_extension("sig"))?;
         
         Ok(())
     }

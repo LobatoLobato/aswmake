@@ -22,8 +22,8 @@ declare_asset! {
         Ok(mvlist.render().into_bytes())
     }
 
-    fn compile_fn(asset: &Asset, _: &PakReader, _: &Vec<u8>) -> AResult<Option<CompilationOutput>> {
-        debug_dbg!("Compiling movelist with rel_path {} for {:?}", asset.rel_path_noext.display(), asset.target_game);
+    fn compile_fn(_asset: &Asset, _: &PakReader, _: &Vec<u8>) -> AResult<Option<CompilationOutput>> {
+        debug_dbg!("Compiling movelist with rel_path {} for {:?}", _asset.rel_path_noext.display(), _asset.target_game);
         Ok(None)
     }
 

@@ -14,7 +14,7 @@ fn main() -> anyhow::Result<()> {
     match &args.command {
         Some(cli::Commands::New { path }) => cli::handlers::new(&mut cfg, path),
         Some(cli::Commands::Ms { command }) => cli::handlers::ms(&mut cfg, command),
-        Some(cli::Commands::Build { path }) => cli::handlers::build(path.as_ref().unwrap_or(&String::from("."))),
+        Some(cli::Commands::Build { path, install }) => cli::handlers::build(path.as_ref().unwrap_or(&String::from(".")), *install),
         None => {
             println!("There was no subcommand given");
             Ok(())

@@ -12,7 +12,6 @@ use winfsp::service::FileSystemService;
 use winfsp::{Result as FspResult, U16CStr};
 
 use super::{
-    Context,
     inode_registry::{EntryKind, INodeNo, InodeRegistry},
 };
 

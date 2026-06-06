@@ -22,7 +22,11 @@ pub enum Commands {
         #[command(subcommand)]
         command: MsCommands
     },
-    Build { path: Option<String> },
+    Build { 
+        path: Option<String> ,
+        #[arg(short, long)]
+        install: bool
+    },
 }
 
 #[derive(Subcommand)]
