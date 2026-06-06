@@ -7,4 +7,4 @@ QUICKBMS_EXE = "external/quickbms/quickbms_4gb_files"
 QUICKBMS_SCRIPT = "external/quickbms/ggst.bms"
 FIXTURES_DIR = "target/fixtures"
 
-WINFSP_DLL_OUTPUT_PATH = { value = "target/winfsp", relative = true }
+WINFSP_DLL_OUTPUT_PATH = { value = "assets/winfsp", relative = true }

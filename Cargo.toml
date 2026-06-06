@@ -2,6 +2,7 @@
 name = "aswmake"
 version = "0.1.0"
 edition = "2024"
+repository = "https://github.com/LobatoLobato/aswmake"
 
 [dependencies]
 aswmake-lib = { path = "./aswmake-lib" }
@@ -45,9 +46,8 @@ windows = { version = "0.61", features = [
     "Win32_Storage_FileSystem",
     "Win32_Foundation",
 ] }
-
-[target.x86_64-pc-windows-msvc.build-dependencies]
-winfsp = { version = "0.13" }
+[build-dependencies]
+target_build_utils = "0.3.1"
 
 [workspace]
 exclude = [
@@ -66,3 +66,8 @@ lazy-regex = "3.6.0"
 suitest = "0.1.4"
 itertools = "0.14.0"
 rayon = "1.12.0"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

@@ -12,6 +12,24 @@ This is a virtual fs and doesnt actually extract anything to disk, so it doesn't
 
 ## Installation
 
+### Install prebuilt binaries via shell script
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/LobatoLobato/aswmake/releases/download/$version/aswmake-installer.sh | sh
+```
+
+### Install prebuilt binaries via powershell script
+
+```sh
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/LobatoLobato/aswmake/releases/download/$version/aswmake-installer.ps1 | iex"
+```
+
+### From Source (Requires Rust)
+Ensure you have the Rust toolchain installed, then run:
+```bash
+cargo install --path .
+```
+
 ### From Source (Requires Rust)
 Ensure you have the Rust toolchain installed, then run:
 ```bash
